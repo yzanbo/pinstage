@@ -54,9 +54,14 @@ final class ThumbnailStore {
         images = images.filter { ids.contains($0.key) }
     }
 
+    /// 画面収録の許可を問い合わせ直す（システム設定で変えて戻ってきたとき）
+    func refreshPermission() {
+        hasPermission = CGPreflightScreenCaptureAccess()
+    }
+
     /// いま撮り直す
     func captureNow() {
-        hasPermission = CGPreflightScreenCaptureAccess()
+        refreshPermission()
         let items = targets()
         DesktopTrace.log("サムネイル", "許可=\(hasPermission) 撮るウインドウ=\(items.count)")
         guard hasPermission, !items.isEmpty, !isCapturing else { return }

@@ -89,20 +89,60 @@ struct OptionPicker<Option: SettingsOption>: View where Option.AllCases: RandomA
     let title: String
     let info: String?
     @Binding var selection: Option
+    /// 選択肢をボタンの形で横に並べるか（選択肢が少なく、短いとき。開かずに一目で選べる）。false ならメニュー
+    let segmented: Bool
 
-    init(_ title: String, info: String? = nil, selection: Binding<Option>) {
+    init(_ title: String, info: String? = nil, selection: Binding<Option>, segmented: Bool = false) {
         self.title = title
         self.info = info
         _selection = selection
+        self.segmented = segmented
     }
 
     var body: some View {
-        Picker(selection: $selection) {
-            ForEach(Array(Option.allCases), id: \.self) { option in
-                Text(option.title).tag(option)
+        if segmented {
+            // 右端を、ほかの行のスイッチ・メニューの右端にそろえる（幅は選択肢に合わせる）
+            LabeledContent {
+                Picker(title, selection: $selection) { options }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+            } label: {
+                SettingTitle(title, info: info)
             }
-        } label: {
-            SettingTitle(title, info: info)
+        } else {
+            Picker(selection: $selection) {
+                options
+            } label: {
+                SettingTitle(title, info: info)
+            }
+        }
+    }
+
+    private var options: some View {
+        ForEach(Array(Option.allCases), id: \.self) { option in
+            Text(option.title).tag(option)
+        }
+    }
+}
+
+/// 案内の 1 行（注意の印つきの説明と、その下の右に、システム設定を開くボタン）。
+/// 説明が長くても細く折り返さないよう、ボタンは説明の下に置く
+struct NoticeRow: View {
+    let text: String
+    let button: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(text, systemImage: "exclamationmark.triangle.fill")
+                .symbolRenderingMode(.multicolor)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(button, action: action)
+            }
         }
     }
 }

@@ -8,7 +8,7 @@ import SwiftUI
 /// 使い方:
 /// - ストリップ: Pinstage.app/Contents/MacOS/Pinstage --render-strip-preview 書き出す場所.png [見た目（grid・list・thumbnail。後ろに Small・Medium・Large を付けると大きさ。省けば小）] [幅] [場面] [辺（left・right・top・bottom）]
 ///   上下の辺では、幅は帯の長さ（省けば 1280）
-/// - ほかの画面: Pinstage.app/Contents/MacOS/Pinstage --render-view-preview 書き出す場所.png 画面（groupEditor など）
+/// - ほかの画面: Pinstage.app/Contents/MacOS/Pinstage --render-view-preview 書き出す場所.png 画面（groupEditor・general など）
 enum StripPreview {
     /// ストリップを描く場面
     enum Scenario: String {
@@ -36,6 +36,11 @@ enum StripPreview {
         case search
         /// 設定の「型」のタブ
         case layouts
+        /// 設定の「一般」「ストリップ」「ショートカット」「自動化」のタブ
+        case general
+        case strip
+        case shortcuts
+        case automation
     }
 
     /// 見本のための設定の置き場（本物の設定を読まない・書き換えない）
@@ -117,6 +122,15 @@ enum StripPreview {
                 let view = LayoutsSettingsView(stage: stage, editor: LayoutEditorWindowController(stage: stage))
                     .frame(width: 560, height: 360)
                 write(view, size: CGSize(width: 560, height: 360), to: url)
+            case .general:
+                write(GeneralSettingsView(stage: stage, thumbnails: ThumbnailStore(), launchAtLogin: LaunchAtLogin()), size: nil, to: url)
+            case .strip:
+                write(StripSettingsView(stage: stage, thumbnails: ThumbnailStore()), size: nil, to: url)
+            case .shortcuts:
+                let shortcuts = ShortcutCenter()
+                write(ShortcutSettingsView(shortcuts: shortcuts, recorder: ShortcutRecorderModel(shortcuts: shortcuts), stage: stage), size: nil, to: url)
+            case .automation:
+                write(AutomationSettingsView(stage: stage), size: nil, to: url)
             }
         }
     }

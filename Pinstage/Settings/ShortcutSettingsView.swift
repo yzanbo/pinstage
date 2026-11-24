@@ -6,6 +6,8 @@ import SwiftUI
 struct ShortcutSettingsView: View {
     let shortcuts: ShortcutCenter
     let recorder: ShortcutRecorderModel
+    /// グループの名前を添えるため（何番目のグループが、いまどのグループか）
+    let stage: StageController
 
     var body: some View {
         SettingsPane {
@@ -22,11 +24,12 @@ struct ShortcutSettingsView: View {
             Section {
                 rows(for: ShortcutAction.groupActions)
             } header: {
-                SettingTitle("グループ", info: "ストリップのグループの、上から数えた番号です。グループはストリップで右クリックして並べ替えられます。")
+                SettingTitle("グループ", info: "ストリップのグループの、上から数えた番号です（かっこの中は、いまその番号にあるグループ）。グループはストリップでドラッグするか、右クリックして並べ替えられます。")
             } footer: {
                 HStack {
                     Spacer()
-                    Button("初期設定に戻す") {
+                    // グループだけでなく、すべてのショートカットを戻す
+                    Button("すべて初期設定に戻す") {
                         recorder.stop()
                         shortcuts.resetToDefaults()
                     }
@@ -38,10 +41,25 @@ struct ShortcutSettingsView: View {
 
     private func rows(for actions: [ShortcutAction]) -> some View {
         ForEach(actions) { action in
-            LabeledContent(action.title) {
+            LabeledContent {
                 ShortcutRecorder(shortcuts: shortcuts, model: recorder, action: action)
+            } label: {
+                HStack(spacing: 4) {
+                    Text(action.title)
+                    if let name = groupName(for: action) {
+                        Text("（\(name)）")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
         }
+    }
+
+    /// グループを呼び出す操作なら、いまその番号にあるグループの名前（ほかの操作・その番号のグループがなければ nil）
+    private func groupName(for action: ShortcutAction) -> String? {
+        guard let index = action.groupIndex, stage.library.groups.indices.contains(index) else { return nil }
+        return stage.library.groups[index].name
     }
 }
 
