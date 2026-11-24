@@ -217,3 +217,27 @@ struct ZoomMemoryTests {
         #expect(result.memory.restore == nil)
     }
 }
+
+@Suite("ストリップに並べる、ふつうのウインドウ")
+struct WindowEligibilityTests {
+    @Test("種類が「ふつうのウインドウ」なら並べ、パネル・ダイアログは並べない")
+    func subrole() {
+        #expect(WindowEligibility.verdict(subrole: "AXStandardWindow") == .accept)
+        #expect(WindowEligibility.verdict(subrole: "AXDialog") == .reject)
+        #expect(WindowEligibility.verdict(subrole: "AXFloatingWindow") == .reject)
+        #expect(WindowEligibility.verdict(subrole: "AXSystemDialog") == .reject)
+    }
+
+    @Test("枠を自前で描くウインドウ（種類が「不明」・種類なし）は、高さと大きさで決める")
+    func frameless() {
+        #expect(WindowEligibility.verdict(subrole: "AXUnknown") == .needsGeometry)
+        #expect(WindowEligibility.verdict(subrole: nil) == .needsGeometry)
+        #expect(WindowEligibility.isNormalWindow(layer: 0, size: CGSize(width: 1200, height: 800)))
+        // ほかのウインドウの上に浮くパネル
+        #expect(!WindowEligibility.isNormalWindow(layer: 3, size: CGSize(width: 1200, height: 800)))
+        // ツールチップ・タブのバーなどの小さな部品
+        #expect(!WindowEligibility.isNormalWindow(layer: 0, size: CGSize(width: 1800, height: 39)))
+        #expect(!WindowEligibility.hasWindowSize(CGSize(width: 64, height: 64)))
+        #expect(WindowEligibility.hasWindowSize(CGSize(width: 100, height: 100)))
+    }
+}

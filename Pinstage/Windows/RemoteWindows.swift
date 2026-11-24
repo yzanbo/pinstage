@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import PinstageCore
 
 /// ほかのデスクトップのウインドウを見つける（非公開の API）
 ///
@@ -45,9 +46,11 @@ nonisolated enum RemoteWindows {
             guard let element = createWithToken(token as CFData)?.takeRetainedValue() else { continue }
             var windowID: CGWindowID = 0
             guard getWindow(element, &windowID) == .success, remaining.contains(windowID) else { continue }
+            // パネル・ダイアログは除く。種類の分からないもの（枠を自前で描くウインドウ）は、番号で選んだときに、
+            // ふつうの高さの・大きさのあるウインドウだと確かめてある（missingWindows）
             var subrole: CFTypeRef?
             AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole)
-            guard (subrole as? String) == kAXStandardWindowSubrole else { continue }
+            guard WindowEligibility.verdict(subrole: subrole as? String) != .reject else { continue }
             remaining.remove(windowID)
             found.append(Found(element: element, windowID: windowID))
         }
@@ -62,23 +65,12 @@ extension RemoteWindows {
     @MainActor
     static func missingWindows(known: Set<CGWindowID>) -> [pid_t: Set<CGWindowID>] {
         let apps = Set(NSWorkspace.shared.runningApplications.filter(\.hasManageableWindows).map(\.processIdentifier))
-        let list = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
         var result: [pid_t: Set<CGWindowID>] = [:]
-        for info in list {
-            guard (info[kCGWindowLayer as String] as? Int) == 0,
-                  let pid = info[kCGWindowOwnerPID as String] as? Int32, apps.contains(pid),
-                  let number = info[kCGWindowNumber as String] as? Int,
-                  !known.contains(CGWindowID(number)),
-                  let boundsInfo = info[kCGWindowBounds as String] as? NSDictionary,
-                  let bounds = CGRect(dictionaryRepresentation: boundsInfo as CFDictionary),
-                  bounds.width >= minimumSize, bounds.height >= minimumSize,
-                  !SkyLight.spaces(ofWindow: CGWindowID(number)).isEmpty
-            else { continue }
-            result[pid, default: []].insert(CGWindowID(number))
+        for entry in WindowListEntry.all() where entry.isNormalWindow && apps.contains(entry.pid) {
+            let id = CGWindowID(entry.number)
+            guard !known.contains(id), !SkyLight.spaces(ofWindow: id).isEmpty else { continue }
+            result[entry.pid, default: []].insert(id)
         }
         return result
     }
-
-    /// これより小さいものは、ふつうのウインドウではないとみなす（タブのバー・メニューなどの部品）
-    private static let minimumSize: CGFloat = 100
 }

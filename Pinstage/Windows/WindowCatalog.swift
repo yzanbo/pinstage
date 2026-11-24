@@ -46,7 +46,12 @@ enum WindowCatalog {
             for window in windows {
                 // ふつうのウインドウだけ（パネル・ダイアログ・ツールチップなどは除く）
                 let subrole: String? = AXWindow.attribute(window, kAXSubroleAttribute)
-                guard subrole == kAXStandardWindowSubrole else { continue }
+                let windowID = SkyLight.windowID(of: window)
+                guard isManageable(window, subrole: subrole, windowID: windowID) else {
+                    // 並ばないアプリがあったときに、原因を確かめるための記録
+                    DesktopTrace.logOnce("外したウインドウ", "\(app.bundleIdentifier ?? "?") subrole=\(subrole ?? "なし")")
+                    continue
+                }
                 items.append(WindowItem(
                     id: window,
                     pid: app.processIdentifier,
@@ -55,11 +60,30 @@ enum WindowCatalog {
                     title: AXWindow.attribute(window, kAXTitleAttribute) ?? "",
                     icon: app.icon,
                     isMinimized: AXWindow.attribute(window, kAXMinimizedAttribute) ?? false,
-                    windowID: SkyLight.windowID(of: window)
+                    windowID: windowID
                 ))
             }
         }
         return items
+    }
+
+    /// ストリップに並べる、ふつうのウインドウか（決まりは PinstageCore の WindowEligibility）
+    private static func isManageable(_ window: AXUIElement, subrole: String?, windowID: CGWindowID?) -> Bool {
+        switch WindowEligibility.verdict(subrole: subrole) {
+        case .accept:
+            return true
+        case .reject:
+            return false
+        case .needsGeometry:
+            // 枠を自前で描くウインドウ（Electron など）は、種類が分からない。ふつうの高さにある、大きさのあるウインドウなら並べる
+            let role: String? = AXWindow.attribute(window, kAXRoleAttribute)
+            guard role == kAXWindowRole else { return false }
+            if let windowID {
+                return WindowListEntry.entry(for: windowID)?.isNormalWindow ?? false
+            }
+            // ウインドウの番号が分からないときは、高さ（レベル）を調べられないので、大きさだけで決める
+            return WindowEligibility.hasWindowSize(AXWindow.frame(of: window)?.size ?? .zero)
+        }
     }
 }
 
