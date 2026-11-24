@@ -5,6 +5,14 @@ RELEASE_APP := $(DERIVED_DATA)/Build/Products/Release/Pinstage.app
 BUNDLE_ID := app.pinstage.Pinstage
 # make install で入れる場所
 INSTALL_DIR ?= /Applications
+# アプリの版（project.yml の CFBundleShortVersionString）。1.0.0 より前は β 版
+VERSION := $(shell sed -n 's/.*CFBundleShortVersionString: *"\(.*\)"/\1/p' project.yml)
+# β 版として出すときは BETA=1 のように番号を渡す（タグは v0.1.0-beta.1、GitHub ではプレリリースにする）
+BETA ?=
+RELEASE_NAME := $(VERSION)$(if $(BETA),-beta.$(BETA))
+DIST_BASE := dist/Pinstage-$(RELEASE_NAME)
+DIST_ZIP := $(DIST_BASE).zip
+DIST_DMG := $(DIST_BASE).dmg
 
 # 「Pinstage Dev」の証明書があればそれで署名する（なければその場の署名＝アドホック署名）。
 # 毎回同じ証明書で署名すると、ビルドし直しても macOS から同じアプリと見なされ、
@@ -22,7 +30,7 @@ SWIFT_TEST_FLAGS ?=
 XCODEBUILD := xcodebuild -project Pinstage.xcodeproj -scheme Pinstage -sdk macosx \
 	-derivedDataPath $(DERIVED_DATA) CODE_SIGN_IDENTITY="$(SIGN_IDENTITY)" $(XCODEBUILD_FLAGS)
 
-.PHONY: generate build release run stop install uninstall test clean cert icon preview
+.PHONY: generate build release dist publish run stop install uninstall test clean cert icon preview
 
 # アイコンを描くスクリプトをビルドする場所
 ICON_TOOL_DIR := $(DERIVED_DATA)/icon-tool
@@ -40,6 +48,38 @@ build: generate
 release: generate
 	@echo "署名: $(SIGN_IDENTITY)"
 	$(XCODEBUILD) -configuration Release ONLY_ACTIVE_ARCH=NO build
+
+# GitHub の Releases に置く DMG と zip を作る（dist/Pinstage-版.dmg・.zip・.sha256）。
+# DMG は、開くと Pinstage.app とアプリケーションフォルダが並び、ドラッグで入れられる形にする。
+# 自己署名の証明書はほかの Mac では意味がないので、配る版はいつもアドホック署名にする（Pinshot・Pinshelf と同じ）
+dist:
+	$(MAKE) release SIGN_IDENTITY=-
+	mkdir -p dist
+	ditto -c -k --sequesterRsrc --keepParent "$(RELEASE_APP)" "$(DIST_ZIP)"
+	rm -rf dist/dmg-root
+	mkdir -p dist/dmg-root
+	ditto "$(RELEASE_APP)" dist/dmg-root/Pinstage.app
+	ln -s /Applications dist/dmg-root/Applications
+	@# macOS 26 以降は diskutil image で作る（hdiutil create は「使わなくなる」と警告が出るため）。ない版では hdiutil で作る
+	rm -f "$(DIST_DMG)"
+	if diskutil image create from -h >/dev/null 2>&1; then \
+		diskutil image create from --format UDZO --volumeName "Pinstage" dist/dmg-root "$(DIST_DMG)"; \
+	else \
+		hdiutil create -volname "Pinstage" -srcfolder dist/dmg-root -ov -format UDZO "$(DIST_DMG)"; \
+	fi
+	rm -rf dist/dmg-root
+	cd dist && shasum -a 256 "Pinstage-$(RELEASE_NAME).dmg" "Pinstage-$(RELEASE_NAME).zip" > "Pinstage-$(RELEASE_NAME).sha256"
+	@echo ""
+	@echo "$(DIST_DMG) と $(DIST_ZIP) を作りました（版: $(RELEASE_NAME)）"
+
+# DMG と zip を作り、GitHub に Release（タグ v版）を作ってアップロードする（GitHub CLI を使う）。
+# 説明は「この版の変更」（scripts/release-changes.md。出すたびに書き直す）と「ダウンロードと開き方」をつなげる。
+# β 版のときは、説明の先頭に β 版の注意を付け、プレリリースにする
+publish: dist
+	( $(if $(BETA),cat scripts/release-notes-beta.md; echo;) cat scripts/release-changes.md; echo; cat scripts/release-notes.md ) > dist/release-notes.md
+	gh release create "v$(RELEASE_NAME)" "$(DIST_DMG)" "$(DIST_ZIP)" "$(DIST_BASE).sha256" \
+		--target main --title "Pinstage $(RELEASE_NAME)$(if $(BETA), (β 版))" $(if $(BETA),--prerelease) \
+		--notes-file dist/release-notes.md
 
 # 動いている Pinstage を終了してから、ビルドした新しい版を起動する。
 # 終了した直後は、Launch Services がまだ「動いている」と思っていて、open が
