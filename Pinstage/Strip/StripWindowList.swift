@@ -10,8 +10,6 @@ struct WindowSection: View {
     /// 一覧に使える高さ（ウインドウが少ないとき、行を大きくして埋めるのに使う）
     @State private var listHeight: CGFloat = 0
 
-    /// 行と行の間
-    private static let spacing: CGFloat = 6
     /// 「ほかのウインドウ」のボタンの高さ（おおよそ）
     private static let footerHeight: CGFloat = 24
     /// アイコンの並びの、1 つ分の幅のいちばん小さい値
@@ -28,25 +26,26 @@ struct WindowSection: View {
             if !isIconOnly {
                 SectionHeader(title: "ウインドウ", count: all.count)
             }
-            // ウインドウが少ないときは、行を同じ高さで広げて縦いっぱいに並べる（多いときは中身の高さのままスクロール）
+            // 一覧は決まった高さの行。ほかは、ウインドウが少ないとき、行を同じ高さで広げて縦いっぱいに並べる（多いときは中身の高さのままスクロール）
+            let look = stage.stripSettings.itemSize
+            let spacing = StripRowSizing.spacing(size: look)
             let rowHeight = StripRowSizing.rowHeight(
+                size: look,
                 available: listHeight,
                 count: rows.count,
-                spacing: Self.spacing,
-                footer: all.count > limit ? Self.footerHeight : 0,
-                maximum: StripRowSizing.maximumRowHeight(size: stage.stripSettings.itemSize)
+                footer: all.count > limit ? Self.footerHeight : 0
             )
-            let tiles = stage.stripSettings.itemSize.showsTiles
+            let tiles = look.showsTiles
             ScrollView {
                 if tiles {
                     // アイコンだけを、ストリップの幅に合わせて何個か並べる
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.tileSize), spacing: Self.spacing)], spacing: Self.spacing) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.tileSize), spacing: spacing)], spacing: spacing) {
                         rowViews(rows, rowHeight: 0)
                     }
                     .coordinateSpace(.named(ReorderState.windowSpace))
                     .overlay(alignment: .topLeading) { DropLine(reorder: reorder, count: rows.count, isGrid: true) }
                 }
-                LazyVStack(spacing: Self.spacing) {
+                LazyVStack(spacing: spacing) {
                     if !tiles {
                         rowViews(rows, rowHeight: rowHeight)
                     }
@@ -114,10 +113,6 @@ private struct WindowRow: View {
     private var showsThumbnail: Bool { size.showsThumbnails }
     /// アイコンだけを描くか（ストリップが細い帯のとき・アイコンの並びのとき）
     private var showsIconOnly: Bool { size.isIconOnly || isTile }
-    /// 一覧を 1 行に詰めて出すか（ウインドウが多くて、行に 2 行分の余裕がないとき）
-    private var isCompactList: Bool { size == .list && !StripRowSizing.showsTwoLines(rowHeight: rowHeight) }
-    /// アプリの名前の行を出すか
-    private var showsAppNameLine: Bool { size.showsAppName && !isCompactList }
 
     /// 行が大きくなったときのアイコンの大きさ（元の大きさから、少しだけ大きくする）
     private var scaledIconSize: CGFloat {
@@ -126,7 +121,8 @@ private struct WindowRow: View {
             // 細い帯の幅に収まる大きさまで
             return min(44, max(size.iconSize, rowHeight - 12))
         }
-        if isCompactList { return StripItemSize.compactIconSize }
+        // 一覧は、行の高さを変えないので、アイコンも決まった大きさ
+        if size == .list { return size.iconSize }
         return min(size.iconSize * 1.6, max(size.iconSize, (rowHeight - 12) * 0.55))
     }
 
@@ -138,7 +134,7 @@ private struct WindowRow: View {
     var body: some View {
         content
             .padding(.horizontal, showsIconOnly ? 4 : 8)
-            .padding(.vertical, isCompactList || showsIconOnly ? 4 : 6)
+            .padding(.vertical, size == .list || showsIconOnly ? 4 : 6)
             .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: StripStyle.cornerRadius, style: .continuous)
@@ -181,11 +177,10 @@ private struct WindowRow: View {
         stage.desktopName(of: item, except: strip.spaceID)
     }
 
-    /// ポインタを乗せたときの説明（アイコンだけのときは、ウインドウの名前も出す）
+    /// ポインタを乗せたときの説明（名前は行に収まらないことがあるので、ここにすべて出す。アプリの名前も添える）
     private var helpText: String {
         var operations = "クリックで出す・ダブルクリックで画面いっぱいに広げる・⌘＋クリックで足す/外す・右へドラッグで足す・グループの上へドラッグでグループに入れる"
         if let desktopName { operations = "\(desktopName.title)のウインドウです（クリックで、そのデスクトップへ移って出す）\n" + operations }
-        guard showsIconOnly else { return operations }
         let name = item.title.isEmpty ? item.appName : "\(item.title)（\(item.appName)）"
         return name + "\n" + operations
     }
@@ -212,21 +207,13 @@ private struct WindowRow: View {
         } else {
             HStack(spacing: 8) {
                 appIcon(size: scaledIconSize)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(item.displayTitle)
-                        .font(isCompactList ? .caption : .callout)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if showsAppNameLine {
-                        // ほかのデスクトップのウインドウは、アプリの名前に、そのデスクトップの名前を添える
-                        Text(desktopName.map { "\(item.appName) · \($0.title)" } ?? item.appName)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
+                // ブラウザの縦のタブと同じく、アイコンと名前を 1 行で（アプリの名前は、ポインタを乗せると出る）
+                Text(item.displayTitle)
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Spacer(minLength: 0)
-                if !showsAppNameLine { desktopMark }
+                desktopMark
                 minimizedMark
             }
         }

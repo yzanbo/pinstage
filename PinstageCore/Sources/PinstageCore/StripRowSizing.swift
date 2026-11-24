@@ -21,16 +21,22 @@ public enum StripRowSizing {
     public static func maximumRowHeight(size: StripItemSize) -> CGFloat {
         switch size {
         case .icons, .grid: 64
-        case .list: 96
+        case .list: listRowHeight
         case .thumbnail: 320
         }
     }
 
-    /// 一覧を 2 行（アプリ名つき）で出せる、行のいちばん低い高さ（アイコン 32pt と上下の余白）
-    public static let twoLineHeight: CGFloat = 44
+    /// 一覧の行の高さ（ブラウザの縦のタブと同じくらい。ウインドウの数で変えない）
+    public static let listRowHeight: CGFloat = 34
 
-    /// 一覧の行を 2 行で出すか（ウインドウが多くて行が詰まるときは、1 行にして多く並べる）
-    public static func showsTwoLines(rowHeight: CGFloat) -> Bool {
-        rowHeight >= twoLineHeight
+    /// 行と行の間（一覧は、タブのように詰める）
+    public static func spacing(size: StripItemSize) -> CGFloat {
+        size == .list ? 4 : 6
+    }
+
+    /// 見た目に合わせた行の高さ。一覧は決まった高さ、ほかは一覧の高さに収まるよう広げた高さ
+    public static func rowHeight(size: StripItemSize, available: CGFloat, count: Int, footer: CGFloat) -> CGFloat {
+        if size == .list { return listRowHeight }
+        return rowHeight(available: available, count: count, spacing: spacing(size: size), footer: footer, maximum: maximumRowHeight(size: size))
     }
 }

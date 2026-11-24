@@ -3,14 +3,14 @@ import Foundation
 
 /// ストリップの見た目（ウインドウの並べ方とサムネイルを、1 つにまとめたもの）
 ///
-/// 行の大きさは選ばせない。行はウインドウの数に合わせて縦いっぱいに広がり、その高さで中身を決める
-/// （一覧は余裕があれば 2 行、サムネイルは高さと幅に合わせた大きさ）。
+/// 行の大きさは選ばせない。一覧は、ブラウザの縦のタブと同じくらいの決まった高さの 1 行。
+/// サムネイル・細い帯は、ウインドウの数に合わせて縦いっぱいに広がり、その高さで中身の大きさを決める。
 public enum StripItemSize: String, CaseIterable, Codable, Sendable, Identifiable {
     /// 細い帯（ストリップごと細くして、アイコンだけを縦に並べる。名前はポインタを乗せると出す）
     case icons
     /// アイコンの並び（ストリップの幅はそのままで、ウインドウをアイコンだけで何個か並べる）
     case grid
-    /// 一覧（アイコンと名前。行に余裕があればアプリ名も出す）
+    /// 一覧（アイコンと名前を 1 行で。ブラウザの縦のタブと同じくらいの大きさ）
     case list
     /// サムネイル（ウインドウの中身を映す。画面収録の許可が要る）
     case thumbnail
@@ -45,17 +45,14 @@ public enum StripItemSize: String, CaseIterable, Codable, Sendable, Identifiable
         }
     }
 
-    /// アイコンの一辺（pt。一覧は 2 行のときの大きさ）
+    /// アイコンの一辺（pt）
     public var iconSize: CGFloat {
         switch self {
         case .icons, .grid: 36
-        case .list: 32
+        case .list: 18
         case .thumbnail: 28
         }
     }
-
-    /// 一覧を 1 行に詰めたときのアイコンの一辺（pt）
-    public static let compactIconSize: CGFloat = 18
 
     /// サムネイルのいちばん低い高さ（pt）。サムネイルの見た目のときだけ。行が高ければ、それに合わせて大きくする
     public var thumbnailHeight: CGFloat {
@@ -65,11 +62,6 @@ public enum StripItemSize: String, CaseIterable, Codable, Sendable, Identifiable
     /// サムネイルを出すか（画面収録の許可が要る）
     public var showsThumbnails: Bool {
         thumbnailHeight > 0
-    }
-
-    /// アプリの名前を出せる見た目か（一覧だけ。行に余裕がなければ出さない）
-    public var showsAppName: Bool {
-        self == .list
     }
 
     /// ストリップごと細い帯にするか

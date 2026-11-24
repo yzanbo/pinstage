@@ -117,16 +117,19 @@ struct StripRowSizingTests {
     @Test("サムネイルを出しているときは、上限を大きくする")
     func maximum() {
         #expect(StripRowSizing.maximumRowHeight(size: .thumbnail) > StripRowSizing.maximumRowHeight(size: .list))
-        #expect(StripRowSizing.maximumRowHeight(size: .list) > StripRowSizing.maximumRowHeight(size: .grid))
     }
 
-    @Test("一覧は、行に余裕があれば 2 行、詰まるときは 1 行")
-    func twoLines() {
-        #expect(StripRowSizing.showsTwoLines(rowHeight: 60))
-        #expect(StripRowSizing.showsTwoLines(rowHeight: StripRowSizing.twoLineHeight))
-        #expect(!StripRowSizing.showsTwoLines(rowHeight: 30))
-        // まだ高さが分からない（0）ときは 1 行
-        #expect(!StripRowSizing.showsTwoLines(rowHeight: 0))
+    @Test("一覧の行は、ウインドウの数にかかわらず決まった高さ（ブラウザの縦のタブと同じくらい）")
+    func listRows() {
+        let few = StripRowSizing.rowHeight(size: .list, available: 700, count: 2, footer: 0)
+        let many = StripRowSizing.rowHeight(size: .list, available: 700, count: 40, footer: 0)
+        #expect(few == StripRowSizing.listRowHeight)
+        #expect(many == StripRowSizing.listRowHeight)
+        // サムネイルは、少ないほど大きく広げる
+        let thumbnail = StripRowSizing.rowHeight(size: .thumbnail, available: 700, count: 2, footer: 0)
+        #expect(thumbnail > StripRowSizing.listRowHeight)
+        // 一覧は、行の間も詰める
+        #expect(StripRowSizing.spacing(size: .list) < StripRowSizing.spacing(size: .thumbnail))
     }
 }
 

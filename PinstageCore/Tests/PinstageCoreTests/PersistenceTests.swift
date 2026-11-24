@@ -151,7 +151,6 @@ struct StripTests {
         settings.stripWidth = 320
         settings.itemSize = .icons
         #expect(settings.effectiveWidth == StripGeometry.iconOnlyWidth)
-        #expect(!settings.itemSize.showsAppName)
         #expect(settings.itemSize.thumbnailHeight == 0)
         settings.itemSize = .list
         #expect(settings.effectiveWidth == 320)
