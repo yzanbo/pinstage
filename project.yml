@@ -1,0 +1,82 @@
+# XcodeGen の設定。`xcodegen generate` で Pinstage.xcodeproj を作る
+name: Pinstage
+options:
+  bundleIdPrefix: app.pinstage
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: ja
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+
+targets:
+  # 画面に依存しない中心のロジック（`swift test` でも同じソースを使う）。
+  # アプリに埋め込むフレームワークにすると、自前の証明書で署名したときに読み込みを断られることがあるので、静的ライブラリにする
+  PinstageCore:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: PinstageCore/Sources/PinstageCore
+    settings:
+      base:
+        PRODUCT_NAME: PinstageCore
+        SKIP_INSTALL: YES
+
+  Pinstage:
+    type: application
+    platform: macOS
+    sources:
+      - path: Pinstage
+    dependencies:
+      - target: PinstageCore
+    info:
+      path: Pinstage/Info.plist
+      properties:
+        CFBundleDisplayName: Pinstage
+        CFBundleDevelopmentRegion: ja
+        # 日本語のアプリだと宣言する（しないと、文字の欄の右クリックなど、macOS の部品が英語で出る）
+        CFBundleLocalizations:
+          - ja
+        # アプリの版。1.0.0 より前は β 版。出すたびに上げる。CFBundleVersion（ビルド番号）も 1 つずつ上げる
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSApplicationCategoryType: public.app-category.productivity
+        # メニューバーに常駐し、Dock には出さない
+        LSUIElement: true
+        NSHumanReadableCopyright: ""
+        # pinstage://… の URL で操作できるようにする（自動化。Stream Deck・Alfred・ターミナルの open など）
+        CFBundleURLTypes:
+          - CFBundleURLName: app.pinstage.Pinstage
+            CFBundleURLSchemes:
+              - pinstage
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pinstage.Pinstage
+        PRODUCT_NAME: Pinstage
+        # 開発中はその場の署名（自分の Mac で動かす用）。make cert で作った「Pinstage Dev」があれば Makefile がそれを使う
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        # ほかのアプリのウインドウを動かす（アクセシビリティの API）ため、App Sandbox は使わない
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        # 型は既定で MainActor にする（画面まわりのコードが多いため）
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        GENERATE_INFOPLIST_FILE: NO
+        # アプリのアイコン（scripts/make-app-icon.swift で描いて、make icon で書き出す）
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        # 自前の証明書（Pinstage Dev）で署名しても Debug の dylib の読み込みを断られないよう、Debug だけ Hardened Runtime を切る
+        Debug:
+          ENABLE_HARDENED_RUNTIME: NO
+
+schemes:
+  Pinstage:
+    build:
+      targets:
+        Pinstage: all
+    run:
+      config: Debug

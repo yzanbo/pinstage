@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Xcode（プロジェクトは project.yml から xcodegen で作る）
+*.xcodeproj
+xcuserdata/
+build/
+DerivedData/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# make dist で作る配布用の DMG・zip
+dist/
