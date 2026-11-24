@@ -197,30 +197,46 @@ struct ListReorderTests {
 
 @Suite("ストリップの行の高さ")
 struct StripRowSizingTests {
-    @Test("少ないときは、一覧の高さに収まるよう広げる（上限まで）")
-    func fill() {
-        // (700 - 0 - 6×6) ÷ 7 ≒ 94.9 → 上限 200 の中なので、そのまま
-        let height = StripRowSizing.rowHeight(available: 700, count: 7, spacing: 6, maximum: 200)
-        #expect(abs(height - (700 - 36) / 7) < 0.001)
-        #expect(StripRowSizing.rowHeight(available: 700, count: 2, spacing: 6, maximum: 88) == 88)
+    @Test("アイコンの並びの列の数は、タイルのいちばん小さい幅で入るだけ（狭くても 1 列）")
+    func gridColumns() {
+        // (230 + 6) ÷ (50 + 6) ≒ 4.2 → 4 列
+        #expect(StripRowSizing.gridColumns(width: 230, tileWidth: 50, spacing: 6) == 4)
+        // ちょうど入る幅（50×2 + 6）
+        #expect(StripRowSizing.gridColumns(width: 106, tileWidth: 50, spacing: 6) == 2)
+        #expect(StripRowSizing.gridColumns(width: 105, tileWidth: 50, spacing: 6) == 1)
+        #expect(StripRowSizing.gridColumns(width: 30, tileWidth: 50, spacing: 6) == 1)
+        // まだ幅が分からないとき
+        #expect(StripRowSizing.gridColumns(width: 0, tileWidth: 50, spacing: 6) == 1)
     }
 
-    @Test("多いときは小さい値になり、中身の高さのまま（スクロール）になる")
-    func overflow() {
-        // (300 - 6×39) ÷ 40 ≒ 1.6pt。どの行の中身より低いので、中身の高さのまま並ぶ
-        #expect(StripRowSizing.rowHeight(available: 300, count: 40, spacing: 6, maximum: 88) < 10)
-        #expect(StripRowSizing.rowHeight(available: 100, count: 40, spacing: 6, maximum: 88) == 0)
+    @Test("アイコンの格子は、複数の列なら左右に余白を空ける。余白で列が減るとき・1 列のときは空けない")
+    func gridLayout() {
+        // 230pt に 4 列。余白 4pt ずつを空けても 4 列のまま
+        #expect(StripRowSizing.gridLayout(width: 230, tileWidth: 50, spacing: 6, sideMargin: 4) == .init(columns: 4, sideMargin: 4))
+        // ちょうど 2 列入る幅。余白を空けると 1 列になるので、空けずに 2 列
+        #expect(StripRowSizing.gridLayout(width: 106, tileWidth: 50, spacing: 6, sideMargin: 4) == .init(columns: 2, sideMargin: 0))
+        // 1 列（細い帯）は、線が横なので空けない
+        #expect(StripRowSizing.gridLayout(width: 52, tileWidth: 50, spacing: 6, sideMargin: 4) == .init(columns: 1, sideMargin: 0))
+    }
+
+    @Test("格子の行の右端（同じアプリのまとまりは、そこで次の行へ折り返す）")
+    func lineEnd() {
+        #expect(StripRowSizing.isLineEnd(2, columns: 3))
+        #expect(StripRowSizing.isLineEnd(5, columns: 3))
+        #expect(!StripRowSizing.isLineEnd(3, columns: 3))
+        #expect(!StripRowSizing.isLineEnd(0, columns: 3))
+        // 1 列は、縦に続くので端はない
+        #expect(!StripRowSizing.isLineEnd(0, columns: 1))
+        #expect(!StripRowSizing.isLineEnd(4, columns: 1))
     }
 
     @Test("一覧の行は、ウインドウの数にかかわらず決まった高さ（ブラウザの縦のタブと同じくらい）")
     func listRows() {
-        let few = StripRowSizing.rowHeight(kind: .list(.small), available: 700, count: 2)
-        let many = StripRowSizing.rowHeight(kind: .list(.small), available: 700, count: 40)
-        #expect(few == 34)
-        #expect(many == 34)
-        // サムネイルは、少ないほど大きく広げる
-        let thumbnail = StripRowSizing.rowHeight(kind: .thumbnail(.small), available: 700, count: 2)
-        #expect(thumbnail > 34)
+        #expect(StripRowSizing.rowHeight(kind: .list(.small)) == 34)
+        // サムネイルは、ウインドウが少なくても縦いっぱいには広げず、中身の高さのまま（0）
+        for size in StripIconSize.allCases {
+            #expect(StripRowSizing.rowHeight(kind: .thumbnail(size)) == 0)
+        }
         // 一覧は、行の間も詰める
         #expect(StripRowSizing.spacing(kind: .list(.small)) < StripRowSizing.spacing(kind: .thumbnail(.small)))
     }
@@ -229,7 +245,7 @@ struct StripRowSizingTests {
     func tileRows() {
         for size in StripIconSize.allCases {
             let kind = StripRowKind.tile(size)
-            #expect(StripRowSizing.rowHeight(kind: kind, available: 700, count: 2) == size.tileHeight)
+            #expect(StripRowSizing.rowHeight(kind: kind) == size.tileHeight)
             #expect(kind.iconSize == size.iconSize)
             #expect(kind.showsIconOnly)
             // タイルにアイコンが収まる
@@ -259,7 +275,7 @@ struct StripRowSizingTests {
         }
         for size in sizes {
             // 一覧の行は、大きさで決まった高さ。アイコンが収まる
-            #expect(StripRowSizing.rowHeight(kind: .list(size), available: 700, count: 2) == size.listRowHeight)
+            #expect(StripRowSizing.rowHeight(kind: .list(size)) == size.listRowHeight)
             #expect(size.listIconSize < size.listRowHeight)
         }
         // 横長の帯でも、「小」はいままでの大きさ

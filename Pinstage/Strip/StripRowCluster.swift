@@ -11,6 +11,16 @@ struct RowJoin {
         case horizontal
     }
 
+    /// 行の並べ方（つなぎ方が変わる）
+    enum Arrangement: Equatable {
+        /// 縦に並べた一覧（左右のウインドウバー）。間を詰めて縦につなぐ
+        case vertical
+        /// 横に並べた帯（上下のウインドウバー）。間を詰めて横につなぐ
+        case horizontal
+        /// アイコンの格子（左右のウインドウバーのアイコンの並び）。間は格子が空けるので、枠を伸ばしてつなぐ
+        case grid(columns: Int)
+    }
+
     /// つなぐ行の間（pt。まとまりの枠の中）
     static let spacing: CGFloat = 2
     /// つながる側の角の丸み（pt）
@@ -23,17 +33,35 @@ struct RowJoin {
     var axis: Axis = .vertical
     /// となり合った同じアプリの行の番号の範囲（2 つ以上つながっているときだけ）
     var cluster: ClosedRange<Int>?
+    /// 次の行との間の、枠でつなぐ隙間（アイコンの格子だけ。格子の間は詰められないので、枠を隙間の分だけ伸ばしてつなぐ）
+    var bridge: CGFloat = 0
 
     init() {}
 
     /// - Parameters:
     ///   - index: この行の番号
     ///   - apps: 並べている行の、アプリ（WindowItem.appKey）。範囲の決め方は PinstageCore の ListReorder.cluster
-    init(index: Int, apps: [String], axis: Axis) {
+    private init(index: Int, apps: [String], axis: Axis) {
         cluster = ListReorder.cluster(at: index, keys: apps)
         previous = cluster.map { $0.lowerBound < index } ?? false
         next = cluster.map { $0.upperBound > index } ?? false
         self.axis = axis
+    }
+
+    /// 並べ方に合わせたつながり。
+    /// アイコンの格子は、複数の列なら横につなぎ、行の右端で次の行へ折り返す（枠は端で開いたままにして、続いていることを見せる）。1 列なら縦につなぐ
+    /// - Parameters:
+    ///   - gap: 格子のタイルの間（つなぐタイルの間は、枠をこの分だけ伸ばす）
+    init(index: Int, apps: [String], arrangement: Arrangement, gap: CGFloat) {
+        switch arrangement {
+        case .vertical:
+            self.init(index: index, apps: apps, axis: .vertical)
+        case .horizontal:
+            self.init(index: index, apps: apps, axis: .horizontal)
+        case .grid(let columns):
+            self.init(index: index, apps: apps, axis: columns > 1 ? .horizontal : .vertical)
+            bridge = next && !StripRowSizing.isLineEnd(index, columns: columns) ? gap : 0
+        }
     }
 
     /// 同じアプリのまとまりの中にあるか
@@ -71,8 +99,16 @@ struct ClusterTray: ViewModifier {
                 .padding(vertical ? .horizontal : .vertical, Self.inset)
                 .padding(vertical ? .top : .leading, join.previous ? RowJoin.spacing : Self.inset)
                 .padding(vertical ? .bottom : .trailing, join.next ? 0 : Self.inset)
-                .background(fillShape.fill(Color.primary.opacity(0.05)))
-                .overlay(TrayOutline(previous: join.previous, next: join.next, vertical: join.axis == .vertical, radius: Self.radius).stroke(Color.primary.opacity(0.18), lineWidth: 1))
+                // アイコンの格子では、次のタイルとの隙間まで枠を伸ばしてつなぐ
+                .background {
+                    fillShape.fill(Color.primary.opacity(0.05))
+                        .padding(vertical ? .bottom : .trailing, -join.bridge)
+                }
+                .overlay {
+                    TrayOutline(previous: join.previous, next: join.next, vertical: vertical, radius: Self.radius)
+                        .stroke(Color.primary.opacity(0.18), lineWidth: 1)
+                        .padding(vertical ? .bottom : .trailing, -join.bridge)
+                }
         } else {
             content
         }

@@ -1,24 +1,7 @@
 import CoreGraphics
 
-/// ストリップのウインドウの行の高さ（ウインドウが少ないときは、行を大きくして縦いっぱいに並べる）
+/// ストリップのウインドウの行の高さ（形式と大きさで決まる。ウインドウの数では変えない）
 public enum StripRowSizing {
-    /// 一覧の高さに収まるよう、行を同じ高さで広げたときの高さ（上限まで）
-    ///
-    /// 返した高さは「いちばん低い高さ」として使う。中身の高さより低ければ中身の高さのまま（収まらなければスクロール）。
-    /// - Parameters:
-    ///   - available: 一覧に使える高さ
-    ///   - count: 行の数
-    ///   - spacing: 行と行の間
-    ///   - maximum: 行の高さの上限（間延びしないように）
-    public static func rowHeight(available: CGFloat, count: Int, spacing: CGFloat, maximum: CGFloat) -> CGFloat {
-        guard count > 0, available > 0 else { return 0 }
-        let height = (available - spacing * CGFloat(count - 1)) / CGFloat(count)
-        return max(0, min(height, maximum))
-    }
-
-    /// サムネイルの行の高さの上限（間延びしないように）
-    public static let maximumThumbnailRowHeight: CGFloat = 320
-
     /// 行と行の間（一覧と、小さなアイコンは、タブのように詰める）
     public static func spacing(kind: StripRowKind) -> CGFloat {
         switch kind {
@@ -27,18 +10,52 @@ public enum StripRowSizing {
         }
     }
 
-    /// サムネイルの、名前の行と余白の高さ（行の高さから、これを除いた分がサムネイルの高さ）
-    public static let thumbnailCaptionHeight: CGFloat = 34
-
-    /// 行の描き方に合わせた行の高さ。一覧・アイコンは決まった高さ、サムネイルは一覧の高さに収まるよう広げた高さ
-    public static func rowHeight(kind: StripRowKind, available: CGFloat, count: Int) -> CGFloat {
+    /// 行の描き方に合わせた、行のいちばん低い高さ。ウインドウが少なくても、縦いっぱいには広げない。
+    /// 一覧・アイコンは大きさで決まった高さ。サムネイルは 0（中身の高さのまま。サムネイルの高さは大きさで決まり、名前の行の高さは文字の大きさで変わる）
+    public static func rowHeight(kind: StripRowKind) -> CGFloat {
         switch kind {
         case .list(let size): size.listRowHeight
         case .tile(let size): size.tileHeight
-        // 少ないときに広げる高さ（多いときは小さい値になり、中身の高さのまま。サムネイルの高さの下限は、ビューで大きさから決める）
-        case .thumbnail:
-            rowHeight(available: available, count: count, spacing: spacing(kind: kind), maximum: maximumThumbnailRowHeight)
+        case .thumbnail: 0
         }
+    }
+
+    // MARK: - アイコンの並び（左右に出したときの格子）
+
+    /// 格子の列の数（タイルのいちばん小さい幅で、使える幅に入るだけ。いつも 1 列以上）
+    /// - Parameters:
+    ///   - width: 一覧に使える幅
+    ///   - tileWidth: タイルのいちばん小さい幅
+    ///   - spacing: タイルの間
+    public static func gridColumns(width: CGFloat, tileWidth: CGFloat, spacing: CGFloat) -> Int {
+        guard width > 0, tileWidth > 0 else { return 1 }
+        return max(1, Int(((width + spacing) / (tileWidth + spacing)).rounded(.down)))
+    }
+
+    /// アイコンの格子の並べ方（列の数と、左右の余白）
+    public struct GridLayout: Equatable, Sendable {
+        public let columns: Int
+        /// 左右の余白（行の端のアイコンの外にも、落とす位置の縦の線を引けるように空ける）
+        public let sideMargin: CGFloat
+    }
+
+    /// アイコンの格子の並べ方を決める。
+    /// 複数の列のときは、左右に余白を空ける（行の端の線のため）。ただし、余白を空けると列が減るときは空けない（線は端の内側に寄せて引ける）。
+    /// 1 列のときは、線は横（アイコンとアイコンの間）なので空けない
+    /// - Parameters:
+    ///   - width: 一覧に使える幅（余白を含む）
+    ///   - sideMargin: 空けたい左右の余白
+    public static func gridLayout(width: CGFloat, tileWidth: CGFloat, spacing: CGFloat, sideMargin: CGFloat) -> GridLayout {
+        let columns = gridColumns(width: width, tileWidth: tileWidth, spacing: spacing)
+        guard columns > 1, gridColumns(width: width - sideMargin * 2, tileWidth: tileWidth, spacing: spacing) == columns else {
+            return GridLayout(columns: columns, sideMargin: 0)
+        }
+        return GridLayout(columns: columns, sideMargin: sideMargin)
+    }
+
+    /// 格子で、その番号のタイルが行の右端か（次のタイルは次の行の左端に折り返す。1 列なら、どれも端ではなく縦に続く）
+    public static func isLineEnd(_ index: Int, columns: Int) -> Bool {
+        columns > 1 && index % columns == columns - 1
     }
 
     // MARK: - 上下に出したとき（横長の帯）

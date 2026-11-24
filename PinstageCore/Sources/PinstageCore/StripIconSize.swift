@@ -81,7 +81,7 @@ public enum StripIconSize: String, CaseIterable, Codable, Sendable, Identifiable
 
     // MARK: サムネイル
 
-    /// サムネイルのいちばん低い高さ（pt）。ウインドウが少なく、行が高ければ、それに合わせて大きくする
+    /// サムネイルの高さ（pt）
     public var thumbnailHeight: CGFloat {
         switch self {
         case .small: 84

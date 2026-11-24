@@ -27,6 +27,15 @@ enum ReorderLayout {
     case columns
     /// 格子に並べたアイコン（左右のウインドウバーの「アイコンの並び」）
     case grid
+
+    /// 行の並べ方から決める。1 列のアイコンの並びは縦に並んでいるので、一覧と同じく、上下の位置で落とす位置を決め、アイコンとアイコンの間に横の線を引く
+    init(_ arrangement: RowJoin.Arrangement) {
+        switch arrangement {
+        case .vertical: self = .rows
+        case .horizontal: self = .columns
+        case .grid(let columns): self = columns > 1 ? .grid : .rows
+        }
+    }
 }
 
 /// 行をドラッグして、一覧の中なら並べ替え、ストリップの外なら onDropOutside。動かさずに離したらクリック
@@ -57,6 +66,23 @@ struct ReorderDrag: ViewModifier {
 
     /// これより動かしたらドラッグ（それより小さければクリック）
     private static let threshold: CGFloat = 4
+    /// ウインドウバーから、この幅まではみ出しても並べ替えを続ける（pt）。
+    /// 細い帯（アイコン 1 列）では、上下に動かしているつもりでも横に少しはみ出しやすく、はみ出すと線が消えて、離すとステージに出てしまうため
+    private static let outsideTolerance: CGFloat = 24
+
+    /// ポインタがウインドウバーの中（並べ替える範囲）にあるか。並ぶ向きと直角の側に、少しはみ出してもよい
+    private var isPointerInStrip: Bool {
+        let tolerance = Self.outsideTolerance
+        let area = layout == .columns
+            ? strip.frame.insetBy(dx: 0, dy: -tolerance)
+            : strip.frame.insetBy(dx: -tolerance, dy: 0)
+        return area.contains(NSEvent.mouseLocation)
+    }
+
+    /// 線を出したか・出さなかった理由を、開発用の記録に残す（実機のドラッグでしか起きない不具合を調べるため。同じ内容が続く間は書かない）
+    private func trace(_ outcome: @autoclosure () -> String) {
+        DesktopTrace.log("並べ替えの線", "\(space) \(layout) \(index + 1)/\(count) 枠\(reorder.frames.count) → \(outcome())")
+    }
 
     func body(content: Content) -> some View {
         content
@@ -76,7 +102,8 @@ struct ReorderDrag: ViewModifier {
                         if group != nil {
                             // グループの上では、並べ替えの線を出さない
                             reorder.dropIndex = nil
-                        } else if strip.frame.contains(NSEvent.mouseLocation) {
+                            trace("グループの上")
+                        } else if isPointerInStrip {
                             let target = switch layout {
                             case .rows: ListReorder.dropIndex(forY: value.location.y, frames: reorder.frames, count: count)
                             case .columns: ListReorder.dropIndex(forX: value.location.x, frames: reorder.frames, count: count)
@@ -84,9 +111,12 @@ struct ReorderDrag: ViewModifier {
                             }
                             // 落とせない位置（同じアプリをまとめているときの、まとまりの中）は、線を出さない
                             let allowed = canDrop?(target) ?? true
-                            reorder.dropIndex = !allowed || ListReorder.isNoOp(from: index, dropIndex: target) ? nil : target
+                            let isNoOp = ListReorder.isNoOp(from: index, dropIndex: target)
+                            reorder.dropIndex = !allowed || isNoOp ? nil : target
+                            trace(!allowed ? "落とせない位置 \(target)" : isNoOp ? "動かない位置 \(target)" : "線 \(target)")
                         } else {
                             reorder.dropIndex = nil
+                            trace("ウインドウバーの外")
                         }
                         // 同じアプリのまとまりは、ドラッグしている間ずっと、まとめて動かす
                         if let cluster, cluster.count > 1 {
@@ -108,7 +138,7 @@ struct ReorderDrag: ViewModifier {
                             onTap()
                         } else if let group {
                             onDropOnGroup?(group)
-                        } else if !strip.frame.contains(NSEvent.mouseLocation) {
+                        } else if !isPointerInStrip {
                             onDropOutside?()
                         } else if let drop {
                             withAnimation(.snappy(duration: 0.2)) { onMove(drop) }
@@ -123,47 +153,65 @@ struct DropLine: View {
     let reorder: ReorderState
     let count: Int
     var layout: ReorderLayout = .rows
+    /// 一覧の外に、線を引ける隙間（スクロールの欄の余白。いちばん上・下（左・右）の線を、行に重ねずに、その隙間に引く。0 なら一覧の内側に寄せる）
+    var margin: CGFloat = 0
 
     /// 縦の線を引くか（横に並べたもの・格子。縦に並べた行は横の線）
     private var drawsVerticalLine: Bool { layout != .rows }
 
     var body: some View {
         if let drop = reorder.dropIndex {
-            if drawsVerticalLine, let frame = gridLine(drop) {
-                Capsule()
-                    .fill(Color.accentColor)
-                    .frame(width: 3, height: frame.height)
-                    .offset(x: frame.minX - 1.5, y: frame.minY)
-                    .allowsHitTesting(false)
-            } else if !drawsVerticalLine, let y = lineY(drop) {
-                Capsule()
-                    .fill(Color.accentColor)
-                    .frame(height: 3)
-                    .offset(y: y - 1.5)
-                    .allowsHitTesting(false)
+            // 一覧の大きさ（線を一覧の内側に収めるのに使う）
+            GeometryReader { geometry in
+                if drawsVerticalLine, let frame = gridLine(drop, width: geometry.size.width) {
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(width: 3, height: frame.height)
+                        .offset(x: frame.minX - 1.5, y: frame.minY)
+                } else if !drawsVerticalLine, let y = lineY(drop, height: geometry.size.height) {
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(height: 3)
+                        .offset(y: y - 1.5)
+                }
             }
+            .allowsHitTesting(false)
         }
     }
 
-    /// 線の太さの半分。いちばん上（左）に落とすときも、線が一覧の外に出て切り取られないよう、この分だけ内側に寄せる
+    /// 線の太さの半分。いちばん上（左）・いちばん下（右）に落とすときも、線が見える範囲の外に出て切り取られないよう、この分だけ内側に寄せる
     private static let inset: CGFloat = 1.5
+    /// いちばん上・下（左・右）の行の外に線を引くときの、行からの距離
+    private static let endGap: CGFloat = 3
 
-    /// 横の線の高さ（落とす位置の行の上の隙間。最後なら最後の行の下）
-    private func lineY(_ drop: Int) -> CGFloat? {
-        // いちばん上の行の上は一覧の端なので、隙間の代わりに一覧の内側に引く（外に出ると、スクロールの欄に切り取られて見えない）
-        if drop < count, let frame = reorder.frames[drop] { return max(Self.inset, frame.minY - 3) }
-        if let last = reorder.frames[count - 1] { return last.maxY + 3 }
+    /// 線を、見える範囲（一覧と、外の隙間）に収める（外に出ると、スクロールの欄に切り取られて見えない。
+    /// いちばん下までスクロールしたとき、最後の行の下は欄の端になる）
+    private func clamped(_ value: CGFloat, length: CGFloat) -> CGFloat {
+        let lower = Self.inset - margin
+        return min(max(lower, value), max(lower, length + margin - Self.inset))
+    }
+
+    /// 横の線の高さ（落とす位置の行と、前の行との間の真ん中。最初なら最初の行の上、最後なら最後の行の下）
+    private func lineY(_ drop: Int, height: CGFloat) -> CGFloat? {
+        if drop < count, let frame = reorder.frames[drop] {
+            if drop > 0, let previous = reorder.frames[drop - 1] { return (previous.maxY + frame.minY) / 2 }
+            return clamped(frame.minY - Self.endGap, length: height)
+        }
+        if let last = reorder.frames[count - 1] { return clamped(last.maxY + Self.endGap, length: height) }
         return nil
     }
 
-    /// 縦の線の位置（x と、線の上端・高さ。落とす位置のアイコンの左の隙間。最後なら最後のアイコンの右）
-    private func gridLine(_ drop: Int) -> CGRect? {
+    /// 縦の線の位置（x と、線の上端・高さ。落とす位置のアイコンと、同じ行の前のアイコンとの間の真ん中。行の左端なら左、最後なら最後のアイコンの右）
+    private func gridLine(_ drop: Int, width: CGFloat) -> CGRect? {
         if drop < count, let frame = reorder.frames[drop] {
-            // いちばん左のアイコンの左も、一覧の内側に引く
-            return CGRect(x: max(Self.inset, frame.minX - 3), y: frame.minY, width: 0, height: frame.height)
+            // 前のアイコンが同じ行にあれば、その間の真ん中
+            if drop > 0, let previous = reorder.frames[drop - 1], previous.maxX <= frame.minX, abs(previous.midY - frame.midY) < frame.height / 2 {
+                return CGRect(x: (previous.maxX + frame.minX) / 2, y: frame.minY, width: 0, height: frame.height)
+            }
+            return CGRect(x: clamped(frame.minX - Self.endGap, length: width), y: frame.minY, width: 0, height: frame.height)
         }
         if let last = reorder.frames[count - 1] {
-            return CGRect(x: last.maxX + 3, y: last.minY, width: 0, height: last.height)
+            return CGRect(x: clamped(last.maxX + Self.endGap, length: width), y: last.minY, width: 0, height: last.height)
         }
         return nil
     }
