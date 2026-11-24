@@ -8,8 +8,16 @@
   見たいウインドウだけを、グループを作らずにその場で並べて最前面に出せる macOS のメニューバーアプリ
 </p>
 
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-blue.svg" alt="PolyForm Shield License 1.0.0"></a>
+  <img src="https://img.shields.io/badge/macOS-26%2B-lightgrey.svg" alt="macOS 26+">
+  <img src="https://img.shields.io/badge/Swift-6-orange.svg" alt="Swift 6">
+</p>
+
 > [!NOTE]
-> **いまは試作（0.1.0）です。** 操作や保存の形式は、これから変わります。
+> **いまは試作（0.1.0）です。** 操作や保存の形式は、これから変わります。不具合を見つけたら [Issues](https://github.com/yzanbo/pinstage/issues) で教えてください。
+
+> **English:** Pinstage is a macOS menu bar app that lets you pick just the windows you want to see and tile them in front, without first sorting them into groups. A strip on the edge of the screen lists your windows; click, ⌘-click, or drag them onto the "stage" to arrange them side by side. Save combinations as groups and recall them later. The UI is currently in Japanese.
 
 ## ステージマネージャとの違い
 
@@ -68,3 +76,11 @@ make run    # ビルドして起動する
 | `make cert` | 開発用の署名の証明書を作る |
 | `make preview` | ストリップ・編集画面・検索の見た目を、見本のデータで画像に描き出す（`build/preview`。本物の設定は読まない・書き換えない） |
 | `make icon` | アイコンを描き直す（`scripts/make-app-icon.swift` を変えたとき） |
+
+不具合の報告や提案は [Issues](https://github.com/yzanbo/pinstage/issues) へどうぞ。
+
+## ライセンス
+
+[PolyForm Shield License 1.0.0](LICENSE)
+
+Pinstage のソースコードは公開していますが、オープンソースのライセンスではありません。使う・改変する・配ることはできますが、Pinstage と競合する製品（または、作者が Pinstage を使って提供する製品と競合する製品）を提供するために使うことはできません。正確な条件は、[ライセンスの本文](LICENSE)（英語）を見てください。
