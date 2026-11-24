@@ -1,6 +1,6 @@
 import Foundation
 
-/// 保存したグループ（どのウインドウを、どの型で、どのディスプレイに並べるか）
+/// 保存したグループ（どのウインドウを、どの型で、どのディスプレイに並べるか。どのデスクトップのウインドウバーに出すか）
 ///
 /// グループはウインドウを抱え込まないので、同じウインドウを複数のグループに入れられる。
 public struct StageGroup: Codable, Equatable, Identifiable, Sendable {
@@ -11,19 +11,38 @@ public struct StageGroup: Codable, Equatable, Identifiable, Sendable {
     public var layout: LayoutChoice
     /// 出すディスプレイ（ディスプレイの UUID）。つながっていなければ、ストリップのあるディスプレイに出す
     public var displayID: String?
+    /// 出すデスクトップ（macOS のデスクトップの UUID。再起動しても変わらない）。nil なら、すべてのデスクトップのウインドウバーに出す。
+    /// 前の版で保存したグループは nil（すべてのデスクトップ）
+    public var desktopID: String?
 
     public init(
         id: UUID = UUID(),
         name: String,
         members: [WindowSignature],
         layout: LayoutChoice,
-        displayID: String?
+        displayID: String?,
+        desktopID: String? = nil
     ) {
         self.id = id
         self.name = name
         self.members = members
         self.layout = layout
         self.displayID = displayID
+        self.desktopID = desktopID
+    }
+
+    /// そのデスクトップのウインドウバーに出すか
+    ///
+    /// - すべてのデスクトップに出すグループ: 出す
+    /// - そのデスクトップに出すグループ: 出す
+    /// - 覚えたデスクトップがもうないグループ（デスクトップを消した・ディスプレイを外した）: どこにでも出す（呼び出せなくならないように）
+    /// - ウインドウバーのデスクトップが分からないとき（非公開の API が使えない）: すべて出す
+    /// - Parameters:
+    ///   - desktop: ウインドウバーのあるデスクトップの UUID
+    ///   - knownDesktops: いまあるデスクトップの UUID
+    public func isShown(onDesktop desktop: String?, knownDesktops: Set<String>) -> Bool {
+        guard let desktopID, let desktop else { return true }
+        return desktopID == desktop || !knownDesktops.contains(desktopID)
     }
 }
 
@@ -95,20 +114,24 @@ extension StageGroup {
         public var members: [WindowSignature]
         public var layout: LayoutChoice
         public var displayID: String?
+        /// 出すデスクトップ（保存したときのデスクトップ。nil ならすべてのデスクトップ）
+        public var desktopID: String?
 
-        public init(members: [WindowSignature], layout: LayoutChoice, displayID: String?) {
+        public init(members: [WindowSignature], layout: LayoutChoice, displayID: String?, desktopID: String? = nil) {
             self.members = members
             self.layout = layout
             self.displayID = displayID
+            self.desktopID = desktopID
         }
     }
 
     public var content: Content {
-        get { Content(members: members, layout: layout, displayID: displayID) }
+        get { Content(members: members, layout: layout, displayID: displayID, desktopID: desktopID) }
         set {
             members = newValue.members
             layout = newValue.layout
             displayID = newValue.displayID
+            desktopID = newValue.desktopID
         }
     }
 
@@ -134,7 +157,8 @@ extension StageLibrary {
             name: name.flatMap(GroupNaming.normalized) ?? GroupNaming.nextName(existing: groups.map(\.name)),
             members: content.members,
             layout: content.layout,
-            displayID: content.displayID
+            displayID: content.displayID,
+            desktopID: content.desktopID
         )
         groups.append(group)
         return group
@@ -145,6 +169,14 @@ extension StageLibrary {
     public mutating func setContent(_ content: StageGroup.Content, ofGroup id: UUID) -> Bool {
         guard let index = groupIndex(id: id) else { return false }
         groups[index].content = content
+        return true
+    }
+
+    /// グループを出すデスクトップを変える（nil なら、すべてのデスクトップ）。変えたら true
+    @discardableResult
+    public mutating func setDesktop(_ desktopID: String?, ofGroup id: UUID) -> Bool {
+        guard let index = groupIndex(id: id), groups[index].desktopID != desktopID else { return false }
+        groups[index].desktopID = desktopID
         return true
     }
 

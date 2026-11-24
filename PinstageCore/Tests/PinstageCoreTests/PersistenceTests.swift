@@ -503,6 +503,64 @@ struct GroupsPerDisplayTests {
     }
 }
 
+@Suite("デスクトップごとのグループ")
+struct GroupsPerDesktopTests {
+    let here = StageGroup(name: "ここ", members: [], layout: .builtIn(.auto), displayID: nil, desktopID: "DESK-1")
+    let there = StageGroup(name: "あちら", members: [], layout: .builtIn(.auto), displayID: nil, desktopID: "DESK-2")
+    let everywhere = StageGroup(name: "どこでも", members: [], layout: .builtIn(.auto), displayID: nil)
+    let removed = StageGroup(name: "消したデスクトップ", members: [], layout: .builtIn(.auto), displayID: nil, desktopID: "DESK-GONE")
+    let known: Set<String> = ["DESK-1", "DESK-2"]
+
+    @Test("そのデスクトップのグループと、すべてのデスクトップのグループを出す")
+    func perDesktop() {
+        let shown = [here, there, everywhere].filter { $0.isShown(onDesktop: "DESK-1", knownDesktops: known) }.map(\.name)
+        #expect(shown == ["ここ", "どこでも"])
+    }
+
+    @Test("覚えたデスクトップがもうないグループは、どのデスクトップにも出す（呼び出せなくならないように）")
+    func removedDesktop() {
+        #expect(removed.isShown(onDesktop: "DESK-1", knownDesktops: known))
+        #expect(removed.isShown(onDesktop: "DESK-2", knownDesktops: known))
+    }
+
+    @Test("ウインドウバーのデスクトップが分からないときは、すべて出す")
+    func unknownDesktop() {
+        #expect(there.isShown(onDesktop: nil, knownDesktops: known))
+    }
+
+    @Test("前の版で保存したグループ（デスクトップを覚えていない）は、すべてのデスクトップに出す")
+    func legacyFile() throws {
+        let json = #"{"version":1,"groups":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"前の版","members":[],"layout":{"builtIn":{"_0":"auto"}}}],"customLayouts":[]}"#
+        let library = try JSONDecoder().decode(StageLibrary.self, from: Data(json.utf8))
+        #expect(library.groups.first?.desktopID == nil)
+        #expect(library.groups.first?.isShown(onDesktop: "DESK-1", knownDesktops: known) == true)
+    }
+
+    @Test("出すデスクトップを変えられる。保存しても残る")
+    func setDesktop() throws {
+        var library = StageLibrary(groups: [everywhere])
+        let changed = library.setDesktop("DESK-2", ofGroup: everywhere.id)
+        #expect(changed)
+        // 同じなら変えない
+        let unchanged = library.setDesktop("DESK-2", ofGroup: everywhere.id)
+        #expect(!unchanged)
+        let decoded = try JSONDecoder().decode(StageLibrary.self, from: JSONEncoder().encode(library))
+        #expect(decoded.groups.first?.desktopID == "DESK-2")
+        let cleared = library.setDesktop(nil, ofGroup: everywhere.id)
+        #expect(cleared)
+        #expect(library.groups.first?.desktopID == nil)
+    }
+
+    @Test("グループの中身を作り直すと、出すデスクトップも、作り直したデスクトップになる")
+    func contentCarriesDesktop() {
+        var library = StageLibrary(groups: [everywhere])
+        library.setContent(StageGroup.Content(members: [], layout: .builtIn(.auto), displayID: nil, desktopID: "DESK-1"), ofGroup: everywhere.id)
+        #expect(library.groups.first?.desktopID == "DESK-1")
+        let added = library.addGroup(name: nil, content: StageGroup.Content(members: [], layout: .builtIn(.auto), displayID: nil, desktopID: "DESK-2"))
+        #expect(added.desktopID == "DESK-2")
+    }
+}
+
 @Suite("見えている画面を記録した配置")
 struct RecordedArrangementTests {
     let stage = CGRect(x: 246, y: 25, width: 1354, height: 950)

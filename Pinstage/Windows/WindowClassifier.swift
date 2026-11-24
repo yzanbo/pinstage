@@ -17,6 +17,8 @@ struct WindowClassification {
     var windowSpaces: [AXUIElement: Set<UInt64>]?
     /// デスクトップの名前
     var desktopNames: [UInt64: DesktopName]
+    /// デスクトップの UUID（グループを出すデスクトップを覚えるのに使う。番号は再起動で変わることがあるので UUID で覚える）
+    var desktopUUIDs: [UInt64: String]
     /// いまのデスクトップの見分け
     var activeSpace: ActiveSpace
     /// ウインドウごとの、あるディスプレイの鍵（ディスプレイごとに分けないときは見分けないので nil）
@@ -56,6 +58,7 @@ enum WindowClassifier {
         return WindowClassification(
             windowSpaces: spaces,
             desktopNames: desktopNames(displayList ?? []),
+            desktopUUIDs: desktopUUIDs(displayList ?? []),
             activeSpace: WindowClassification.ActiveSpace(
                 ids: spaceIDs,
                 floating: snapshot.floating,
@@ -71,6 +74,12 @@ enum WindowClassifier {
         DesktopNaming.names(displays: displays.map { display in
             display.spaces.map { DesktopNaming.Space(id: $0.id, isFullScreen: $0.isFullScreen) }
         })
+    }
+
+    /// デスクトップの番号ごとの UUID（UUID が分からないデスクトップは入らない）
+    private static func desktopUUIDs(_ displays: [SkyLight.Display]) -> [UInt64: String] {
+        let pairs = displays.flatMap(\.spaces).compactMap { space in space.uuid.map { (space.id, $0) } }
+        return Dictionary(pairs, uniquingKeysWith: { first, _ in first })
     }
 
     /// ウインドウごとの、あるデスクトップ（番号が分からないウインドウは入らない）

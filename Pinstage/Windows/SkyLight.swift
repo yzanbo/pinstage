@@ -12,6 +12,9 @@ enum SkyLight {
         let id: UInt64
         /// フルスクリーンのアプリのデスクトップか
         let isFullScreen: Bool
+        /// デスクトップの UUID（macOS が設定ファイルに保存していて、再起動しても変わらない。番号の id は変わることがある）。
+        /// 空のときは nil（最初のデスクトップが空になる環境があるとされる）
+        var uuid: String? = nil
     }
 
     /// 1 つのディスプレイのデスクトップ（左から順）
@@ -74,7 +77,8 @@ enum SkyLight {
             let spaces = (entry["Spaces"] as? [[String: Any]] ?? []).compactMap { space -> Space? in
                 guard let id = Self.spaceID(space["ManagedSpaceID"]) else { return nil }
                 // 種類: 0 = ふつうのデスクトップ、4 = フルスクリーンのアプリ
-                return Space(id: id, isFullScreen: (space["type"] as? Int) == 4)
+                let uuid = (space["uuid"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                return Space(id: id, isFullScreen: (space["type"] as? Int) == 4, uuid: uuid)
             }
             let current = Self.spaceID((entry["Current Space"] as? [String: Any])?["ManagedSpaceID"]) ?? 0
             return Display(identifier: identifier, spaces: spaces, current: current)
@@ -99,6 +103,14 @@ enum SkyLight {
         if !current.isEmpty {
             removeWindowsFromSpaces(connection, windows, Array(current) as CFArray)
         }
+    }
+
+    /// そのディスプレイ（StageController.displayKey）のデスクトップの一覧。
+    /// デスクトップがすべてのディスプレイにまたがる設定では、ディスプレイの名前が "Main" の 1 つだけになるので、それを使う
+    static func display(forKey key: String, in displays: [Display]) -> Display? {
+        displays.first { $0.identifier == key }
+            ?? displays.first { $0.identifier == "Main" }
+            ?? (displays.count == 1 ? displays[0] : nil)
     }
 
     /// いま表に出ているデスクトップ（ディスプレイごと）

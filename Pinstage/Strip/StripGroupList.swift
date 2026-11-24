@@ -14,6 +14,11 @@ struct GroupSection: View {
     /// 横長の帯で、グループの一覧の中身の幅（多いときは、この欄だけ横にスクロールさせる）
     @State private var contentWidth: CGFloat = 0
 
+    /// このウインドウバーに並べるグループ（このディスプレイ・デスクトップのもの。並び順は全体のまま）
+    private var visibleGroups: [StageGroup] {
+        stage.groups(on: strip.screen, desktop: strip.spaceID)
+    }
+
     /// グループの欄の高さの上限（ストリップの高さに対する割合）。超えたらスクロールする
     private static let maximumShare: CGFloat = 0.4
     /// 横長の帯で、グループの欄の幅の上限（ストリップの幅に対する割合）
@@ -43,7 +48,7 @@ struct GroupSection: View {
     /// 上下に出したとき: グループを作る ＋ と、グループを横に並べる（多いときは、この欄だけ横にスクロール）
     @ViewBuilder
     private var bar: some View {
-        let visible = stage.groups(on: strip.screen)
+        let visible = visibleGroups
         BarDivider()
         GroupAddButton(stage: stage, screen: strip.screen)
         if !visible.isEmpty {
@@ -70,8 +75,7 @@ struct GroupSection: View {
         let isIconOnly = strip.isCompact
         let maximum = strip.visibleFrame.height * Self.maximumShare
         VStack(alignment: .leading, spacing: 6) {
-            // このディスプレイのストリップに並べるグループ（並び順は全体のまま）
-            let visible = stage.groups(on: strip.screen)
+            let visible = visibleGroups
             if !isIconOnly {
                 // 見出しの右の ＋ で、グループを作る（ステージを保存・見えている画面を記録）
                 HStack(spacing: 0) {
@@ -86,7 +90,7 @@ struct GroupSection: View {
             if visible.isEmpty, !isIconOnly {
                 Text(stage.library.groups.isEmpty
                     ? "ステージに出したウインドウを、見出しの ＋ から「ステージをグループとして保存」すると、ここに並びます"
-                    : "このディスプレイのグループはありません。ここで ＋ から保存すると、このディスプレイのグループになります")
+                    : "このデスクトップのグループはありません。ここで ＋ から保存すると、このデスクトップのグループになります")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -124,6 +128,11 @@ private struct GroupRow: View {
     let actions: AppActions
 
     private var screen: NSScreen { strip.screen }
+
+    /// このウインドウバーでの並びの、dropIndex の前へ移す（ショートカットの番号も変わる。ほかのディスプレイ・デスクトップのグループの並びは崩さない）
+    private func move(to dropIndex: Int) {
+        stage.moveGroup(from: position, dropIndex: dropIndex, on: screen, desktop: strip.spaceID)
+    }
 
     private var size: StripItemSize { stage.stripSettings.itemSize }
 
@@ -169,7 +178,7 @@ private struct GroupRow: View {
             reorder: reorder,
             strip: strip,
             onTap: { Task { await stage.recall(group, fallback: screen) } },
-            onMove: { stage.moveGroup(from: position, dropIndex: $0, on: screen) }
+            onMove: { move(to: $0) }
         ))
         .help(helpText(running: running))
         .contextMenu {
@@ -180,13 +189,14 @@ private struct GroupRow: View {
                 }
             }
             layoutMenu
+            desktopMenu
             Button("いまのステージで上書き保存") { stage.overwriteGroup(group.id, on: screen) }
                 .disabled(stage.stage(on: screen).selection.isEmpty)
             Button("見えている画面で上書き記録") { stage.rerecordGroup(group.id, on: screen) }
             Divider()
-            Button(strip.isHorizontal ? "左へ" : "上へ") { stage.moveGroup(from: position, dropIndex: position - 1, on: screen) }
+            Button(strip.isHorizontal ? "左へ" : "上へ") { move(to: position - 1) }
                 .disabled(position == 0)
-            Button(strip.isHorizontal ? "右へ" : "下へ") { stage.moveGroup(from: position, dropIndex: position + 2, on: screen) }
+            Button(strip.isHorizontal ? "右へ" : "下へ") { move(to: position + 2) }
                 .disabled(position == visibleCount - 1)
             Divider()
             Button("削除", role: .destructive) { stage.deleteGroup(group.id) }
@@ -289,6 +299,23 @@ private struct GroupRow: View {
                 stage.setLayout(choice, ofGroup: group.id, fallback: screen)
             }
         }
+    }
+
+    /// 出すデスクトップを選ぶメニュー（このデスクトップだけ／すべてのデスクトップ）。デスクトップが分からないときは選べない
+    private var desktopMenu: some View {
+        let here = strip.spaceID
+        let name = here.flatMap { stage.desktopNames[$0]?.title }
+        return Menu("出すデスクトップ") {
+            Toggle(name.map { "このデスクトップだけ（\($0)）" } ?? "このデスクトップだけ", isOn: Binding(
+                get: { stage.isGroup(group, onlyOnDesktop: here) },
+                set: { if $0 { stage.setDesktop(here, ofGroup: group.id) } }
+            ))
+            Toggle("すべてのデスクトップ", isOn: Binding(
+                get: { group.desktopID == nil },
+                set: { if $0 { stage.setDesktop(nil, ofGroup: group.id) } }
+            ))
+        }
+        .disabled(!stage.canAssignGroups(toDesktop: here))
     }
 
     /// ウインドウ・ほかのグループの中身を、このグループに重ねているか

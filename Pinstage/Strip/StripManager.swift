@@ -196,11 +196,7 @@ final class StripManager {
         guard let displays = SkyLight.displays() else { return }
         var wanted: [(screen: NSScreen, space: UInt64)] = []
         for screen in stage.stripScreens {
-            let key = StageController.displayKey(screen)
-            // デスクトップがすべてのディスプレイにまたがる設定では、ディスプレイの名前が "Main" の 1 つだけになる
-            let display = displays.first { $0.identifier == key }
-                ?? displays.first { $0.identifier == "Main" }
-                ?? (displays.count == 1 ? displays[0] : nil)
+            let display = SkyLight.display(forKey: StageController.displayKey(screen), in: displays)
             for space in display?.spaces ?? [] where !space.isFullScreen {
                 wanted.append((screen, space.id))
             }

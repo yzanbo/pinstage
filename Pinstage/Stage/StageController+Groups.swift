@@ -13,7 +13,20 @@ extension StageController {
         let stage = self.stage(on: screen)
         let members = stageItems(on: screen).compactMap(\.signature)
         guard !members.isEmpty else { return nil }
-        return StageGroup.Content(members: members, layout: stage.layout, displayID: screen.displayUUID)
+        return StageGroup.Content(members: members, layout: stage.layout, displayID: screen.displayUUID, desktopID: currentDesktopID(on: screen))
+    }
+
+    /// そのディスプレイで、いま表に出ているデスクトップの UUID（保存したグループは、このデスクトップのウインドウバーに出す。分からなければ nil で、すべてのデスクトップ）
+    private func currentDesktopID(on screen: NSScreen) -> String? {
+        guard SkyLight.isAvailable, let displays = SkyLight.displays(),
+              let display = SkyLight.display(forKey: Self.displayKey(screen), in: displays)
+        else { return nil }
+        return display.spaces.first { $0.id == display.current }?.uuid
+    }
+
+    /// デスクトップの番号から、その UUID（グループを出すデスクトップとして覚える値。分からなければ nil）
+    private func desktopID(of space: UInt64?) -> String? {
+        space.flatMap { desktopUUIDs[$0] }
     }
 
     /// 見えている画面から、グループの中身を作る（位置・大きさ・重なりの順番ごと記録する）。ステージも、その組み合わせにする
@@ -28,7 +41,8 @@ extension StageController {
         return StageGroup.Content(
             members: arrangement.compactMap(\.item.signature),
             layout: layout,
-            displayID: screen.displayUUID
+            displayID: screen.displayUUID,
+            desktopID: currentDesktopID(on: screen)
         )
     }
 
@@ -148,20 +162,49 @@ extension StageController {
         editLibrary { $0.reorderMember(inGroup: id, from: from, to: to, swap: swap) }
     }
 
+    /// グループを出すデスクトップを変える（右クリックの「出すデスクトップ」）
+    /// - Parameter space: 出すデスクトップの番号（nil なら、すべてのデスクトップ）
+    func setDesktop(_ space: UInt64?, ofGroup id: UUID) {
+        let desktopID = desktopID(of: space)
+        // 番号を渡したのに UUID が分からないときは、変えない（すべてのデスクトップになってしまわないように）
+        guard space == nil || desktopID != nil else { return }
+        editLibrary { $0.setDesktop(desktopID, ofGroup: id) }
+    }
+
+    /// そのデスクトップに、グループを出すデスクトップとして決められるか（UUID が分かるか）
+    func canAssignGroups(toDesktop space: UInt64?) -> Bool {
+        desktopID(of: space) != nil
+    }
+
+    /// グループを、そのデスクトップだけに出しているか
+    func isGroup(_ group: StageGroup, onlyOnDesktop space: UInt64?) -> Bool {
+        guard let desktopID = group.desktopID else { return false }
+        return self.desktopID(of: space) == desktopID
+    }
+
     // MARK: - ストリップに並べる
 
-    /// そのディスプレイのウインドウバーに並べるグループ（ウインドウバーが 1 つのときはすべて）
-    func groups(on screen: NSScreen) -> [StageGroup] {
-        guard separatesDisplays else { return library.groups }
-        let connected = Set(NSScreen.screens.compactMap(\.displayUUID))
-        return library.groups(forDisplay: screen.displayUUID, connected: connected, isPrimary: screen == NSScreen.primary)
+    /// そのディスプレイ・デスクトップのウインドウバーに並べるグループ（ウインドウバーが 1 つのときは、ディスプレイでは分けない）
+    /// - Parameter space: ウインドウバーのあるデスクトップの番号（分からなければ nil で、デスクトップでは分けない）
+    func groups(on screen: NSScreen, desktop space: UInt64?) -> [StageGroup] {
+        let byDisplay: [StageGroup]
+        if separatesDisplays {
+            let connected = Set(NSScreen.screens.compactMap(\.displayUUID))
+            byDisplay = library.groups(forDisplay: screen.displayUUID, connected: connected, isPrimary: screen == NSScreen.primary)
+        } else {
+            byDisplay = library.groups
+        }
+        // デスクトップごとに分ける（決まりは PinstageCore の StageGroup.isShown）
+        let desktop = desktopID(of: space)
+        let known = Set(desktopUUIDs.values)
+        return byDisplay.filter { $0.isShown(onDesktop: desktop, knownDesktops: known) }
     }
 
     /// グループをドラッグで並べ替える（ショートカットの番号も変わる）
-    /// index・dropIndex は、そのディスプレイのストリップに並べているグループの番号。
-    /// ほかのディスプレイのグループの並びは崩さない（並び順はショートカットの番号でもある）
-    func moveGroup(from index: Int, dropIndex: Int, on screen: NSScreen) {
-        let visible = groups(on: screen).map(\.id)
+    /// index・dropIndex は、そのウインドウバーに並べているグループの番号。
+    /// ほかのディスプレイ・デスクトップのグループの並びは崩さない（並び順はショートカットの番号でもある）
+    func moveGroup(from index: Int, dropIndex: Int, on screen: NSScreen, desktop space: UInt64?) {
+        let visible = groups(on: screen, desktop: space).map(\.id)
         editLibrary { $0.moveGroup(visible: visible, from: index, dropIndex: dropIndex) }
     }
 

@@ -31,6 +31,8 @@ final class StageController {
     @ObservationIgnored private var spaceChangedAt: TimeInterval = 0
     /// デスクトップの名前（「デスクトップ 3」など。ディスプレイごとに左から数える。非公開の API で読む）
     private(set) var desktopNames: [UInt64: DesktopName] = [:]
+    /// デスクトップの番号ごとの UUID（グループを出すデスクトップ。非公開の API が使えないときは空）
+    private(set) var desktopUUIDs: [UInt64: String] = [:]
     /// ほかのデスクトップのウインドウを探す（非公開の API）
     @ObservationIgnored private let discovery = OtherSpaceDiscovery()
     /// ウインドウごとの、あるディスプレイ（ディスプレイの鍵。ディスプレイごとのストリップに、そのディスプレイのウインドウを並べるため）
@@ -192,6 +194,7 @@ final class StageController {
         let result = WindowClassifier.classify(items, separatesDisplays: separatesDisplays)
         // 変わったときだけ入れ直す（同じ値でも入れ直すと、見ているウインドウバーが描き直される）
         if result.desktopNames != desktopNames { desktopNames = result.desktopNames }
+        if result.desktopUUIDs != desktopUUIDs { desktopUUIDs = result.desktopUUIDs }
         if result.windowSpaces != windowSpaces { windowSpaces = result.windowSpaces }
         desktopSnapshot = result.activeSpace.snapshot
         if result.activeSpace.ids != currentSpaceIDs { currentSpaceIDs = result.activeSpace.ids }
