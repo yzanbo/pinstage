@@ -39,7 +39,7 @@ targets:
         # 日本語のアプリだと宣言する（しないと、文字の欄の右クリックなど、macOS の部品が英語で出る）
         CFBundleLocalizations:
           - ja
-        # アプリの版。1.0.0 より前は β 版。出すたびに上げる。CFBundleVersion（ビルド番号）も 1 つずつ上げる
+        # アプリの版。1.0.0 より前は β 版（設定画面にも「0.1.0（β 版）」のように出る）。出すたびに上げる。CFBundleVersion（ビルド番号）も 1 つずつ上げる
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.productivity

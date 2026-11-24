@@ -81,9 +81,9 @@ struct GeneralSettingsView: View {
         }
     }
 
+    /// 版（1.0.0 より前は「（β 版）」を付ける。決まりは PinstageCore の AppVersion）
     private static var version: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
-        return version.hasPrefix("0.") ? "\(version)（試作）" : version
+        AppVersion.displayName(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
     }
 }
 
