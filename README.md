@@ -74,7 +74,7 @@ make run    # ビルドして起動する
 | `make install` | Release でビルドして `/Applications` に入れる |
 | `make stop` | 動いている Pinstage を終了する |
 | `make cert` | 開発用の署名の証明書を作る |
-| `make preview` | ストリップ・編集画面・検索の見た目を、見本のデータで画像に描き出す（`build/preview`。本物の設定は読まない・書き換えない） |
+| `make preview` | ストリップ・編集画面・検索・設定の見た目を、見本のデータで画像に描き出す（`build/preview`。本物の設定は読まない・書き換えない） |
 | `make icon` | アイコンを描き直す（`scripts/make-app-icon.swift` を変えたとき） |
 
 不具合の報告や提案は [Issues](https://github.com/yzanbo/pinstage/issues) へどうぞ。

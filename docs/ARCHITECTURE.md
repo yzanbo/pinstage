@@ -46,7 +46,7 @@ Pinstage/
 │   ├── GroupMemberDrag       見本のアイコンをドラッグして、グループから外す・移す・並び順を変える（GroupDropTargets・MemberDrag）
 │   ├── StripLayoutControls   並べ方のメニュー・余白・グループとして保存・見えている画面を記録
 │   ├── StripStyle            ストリップの見た目の共通の部品（上の帯・アイコンのボタン・見出し・検索の欄・欄の地・強調するボタン）
-│   ├── StripPreview          開発用: 見本のデータで、ストリップ・編集画面・検索・型の一覧を画像に描き出す（make preview）
+│   ├── StripPreview          開発用: 見本のデータで、ストリップ・編集画面・検索・設定のタブを画像に描き出す（make preview）
 │   └── DesktopTrace          開発用: 実機でしか起きない不具合を確かめるための記録（デスクトップの切り替え・サムネイル・ストリップの幅・並べなかったウインドウ）を ~/Library/Logs/Pinstage/desktops.log に書く（Debug ビルドだけ。Release では何もしない）
 ├── Automation/     自動化
 │   ├── AutomationCenter      URL・「ショートカット」アプリから頼まれた操作を行う（どちらも同じところを通す）
@@ -60,8 +60,9 @@ Pinstage/
 │   ├── LayoutEditorView      枠を足す・動かす・角で大きさを変える・前後の順番・目盛りに合わせる・ひな形
 │   └── LayoutEditorWindowController  型の編集画面を開く役（新しい型・いまの並びから・登録した型を直す）
 └── Settings/       設定画面（Pinshelf と同じ、ツールバーのタブ）
-    ├── SettingsWindowController  設定のウインドウ（一般・型・ショートカット・自動化）
-    ├── GeneralSettingsView       ストリップ（出し方・ディスプレイ・大きさ・並べる数・サムネイル）・許可・バージョン
+    ├── SettingsWindowController  設定のウインドウ（一般・ストリップ・型・ショートカット・自動化）
+    ├── GeneralSettingsView       起動・ステージ（1 枚だけ出すときの大きさ）・macOS の設定（許可とステージマネージャの状態）・バージョン
+    ├── StripSettingsView         ストリップの置き方（出し方・位置・ディスプレイ・Dock との重なりの案内）・見た目（形式・大きさ・並べる数）・並べるウインドウ
     ├── LayoutsSettingsView       登録した型の一覧（編集・名前の変更・複製・削除）と小さな見本
     ├── ShortcutSettingsView      ショートカットの記録（Pinshot と同じ作り）
     ├── AutomationSettingsView    「ショートカット」アプリでの使い方と、操作の URL（コピーできる）
