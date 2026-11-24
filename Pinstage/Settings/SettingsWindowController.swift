@@ -44,7 +44,7 @@ final class SettingsWindowController {
         let tabs = SettingsTabViewController()
         tabs.tabStyle = .toolbar
         tabs.addTabViewItem(makeTab("一般", symbol: "gearshape", view: GeneralSettingsView(stage: stage, thumbnails: thumbnails, launchAtLogin: launchAtLogin)))
-        tabs.addTabViewItem(makeTab("ストリップ", symbol: "sidebar.left", view: StripSettingsView(stage: stage, thumbnails: thumbnails)))
+        tabs.addTabViewItem(makeTab("ウインドウバー", symbol: "sidebar.left", view: StripSettingsView(stage: stage, thumbnails: thumbnails)))
         tabs.addTabViewItem(makeTab("型", symbol: "rectangle.split.3x1", view: LayoutsSettingsView(stage: stage, editor: editor)))
         tabs.addTabViewItem(makeTab("ショートカット", symbol: "command", view: ShortcutSettingsView(shortcuts: shortcuts, recorder: recorder, stage: stage)))
         tabs.addTabViewItem(makeTab("自動化", symbol: "gearshape.2", view: AutomationSettingsView(stage: stage)))

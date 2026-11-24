@@ -35,7 +35,7 @@ extension StageController {
         editLibrary { $0.renameCustomLayout(id, to: name) }
     }
 
-    /// 登録した型を消す（その型を使っていたグループとステージは「自動（均等）」にする）
+    /// 登録した型を消す（その型を使っていたグループとステージは「自動」にする）
     func deleteCustomLayout(_ id: UUID) {
         editLibrary { $0.removeCustomLayout(id) }
         for screen in NSScreen.screens where stage(on: screen).layout == .custom(id) {

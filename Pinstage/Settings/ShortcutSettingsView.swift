@@ -14,17 +14,17 @@ struct ShortcutSettingsView: View {
             Section {
                 rows(for: ShortcutAction.stageActions)
             } header: {
-                SettingTitle("ステージ", info: "ボタンを押してからキーを押すと割り当てられます（⌘・⌥・⌃ のどれかと一緒に）。どのアプリを使っていても効きます。")
+                SettingTitle("操作", info: "ボタンを押してからキーを押すと割り当てられます（⌘・⌥・⌃ のどれかと一緒に）。どのアプリを使っていても効きます。")
             }
             Section {
                 rows(for: ShortcutAction.cycleActions)
             } header: {
-                SettingTitle("切り替え", info: "グループは、最後に呼び出したグループの次・前を呼び出します。ウインドウは、ポインタのあるディスプレイで、いま前に出しているウインドウの次・前（ストリップの並び順）だけを出します。端まで行ったら反対の端に戻ります。")
+                SettingTitle("切り替え", info: "グループは、最後に呼び出したグループの次・前を呼び出します。ウインドウは、ポインタのあるディスプレイで、いま前に出しているウインドウの次・前（ウインドウバーの並び順）だけを出します。端まで行ったら反対の端に戻ります。")
             }
             Section {
                 rows(for: ShortcutAction.groupActions)
             } header: {
-                SettingTitle("グループ", info: "ストリップのグループの、上から数えた番号です（かっこの中は、いまその番号にあるグループ）。グループはストリップでドラッグするか、右クリックして並べ替えられます。")
+                SettingTitle("グループ", info: "ウインドウバーのグループの、上から数えた番号です（かっこの中は、いまその番号にあるグループ）。グループはウインドウバーでドラッグするか、右クリックして並べ替えられます。")
             } footer: {
                 HStack {
                     Spacer()

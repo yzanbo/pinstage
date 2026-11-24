@@ -8,9 +8,9 @@ struct AutomationSettingsView: View {
 
     /// グループ以外の操作の URL
     private static let commandURLs: [(title: String, url: String)] = [
-        ("ストリップを切り替える", "pinstage://strip/toggle"),
-        ("ストリップを出す", "pinstage://strip/show"),
-        ("ストリップを隠す", "pinstage://strip/hide"),
+        ("ウインドウバーを切り替える", "pinstage://strip/toggle"),
+        ("ウインドウバーを出す", "pinstage://strip/show"),
+        ("ウインドウバーを隠す", "pinstage://strip/hide"),
         ("検索の欄を出す", "pinstage://search"),
         ("次のグループを呼び出す", "pinstage://group/next"),
         ("前のグループを呼び出す", "pinstage://group/previous"),
@@ -20,7 +20,7 @@ struct AutomationSettingsView: View {
     var body: some View {
         SettingsPane {
             Section {
-                SettingsNote("「ショートカット」アプリで、Pinstage の操作（グループを呼び出す・ストリップを出す／隠す・ステージをグループとして保存・検索）を使えます。「オートメーション」と組み合わせると、時刻・アプリの起動・ディスプレイの接続・集中モードなどをきっかけに、自動で動かせます。Siri・Spotlight からも呼び出せます。")
+                SettingsNote("「ショートカット」アプリで、Pinstage の操作（グループを呼び出す・ウインドウバーを出す／隠す・ステージをグループとして保存・検索）を使えます。「オートメーション」と組み合わせると、時刻・アプリの起動・ディスプレイの接続・集中モードなどをきっかけに、自動で動かせます。Siri・Spotlight からも呼び出せます。")
                 HStack {
                     Spacer()
                     Button("「ショートカット」アプリを開く") {

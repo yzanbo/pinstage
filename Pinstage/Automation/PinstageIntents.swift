@@ -67,7 +67,7 @@ nonisolated enum StripVisibilityOption: String, AppEnum {
     case hide
     case toggle
 
-    static let typeDisplayRepresentation: TypeDisplayRepresentation = "ストリップ"
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "ウインドウバー"
     static let caseDisplayRepresentations: [StripVisibilityOption: DisplayRepresentation] = [
         .show: "出す",
         .hide: "隠す",
@@ -84,14 +84,14 @@ nonisolated enum StripVisibilityOption: String, AppEnum {
 }
 
 struct SetStripIntent: AppIntent {
-    static let title: LocalizedStringResource = "ストリップを出す・隠す"
-    static let description = IntentDescription("Pinstage のストリップ（画面の左端の一覧）を出す・隠す・切り替えます。")
+    static let title: LocalizedStringResource = "ウインドウバーを出す・隠す"
+    static let description = IntentDescription("Pinstage のウインドウバー（画面の端の、ウインドウとグループの一覧）を出す・隠す・切り替えます。")
 
     @Parameter(title: "どうするか", default: .toggle)
     var action: StripVisibilityOption
 
     static var parameterSummary: some ParameterSummary {
-        Summary("ストリップを \(\.$action)")
+        Summary("ウインドウバーを \(\.$action)")
     }
 
     @MainActor
@@ -104,7 +104,7 @@ struct SetStripIntent: AppIntent {
 /// ステージをグループとして保存する
 struct SaveStageAsGroupIntent: AppIntent {
     static let title: LocalizedStringResource = "ステージをグループとして保存"
-    static let description = IntentDescription("ポインタのあるディスプレイのステージに出しているウインドウを、グループとして保存します。")
+    static let description = IntentDescription("ポインタのあるディスプレイのステージに出ているウインドウを、グループとして保存します。")
 
     @Parameter(title: "名前", description: "空のときは「グループ 1」のような仮の名前にします。")
     var name: String?
@@ -147,8 +147,8 @@ nonisolated struct PinstageShortcuts: AppShortcutsProvider {
         )
         AppShortcut(
             intent: SetStripIntent(),
-            phrases: ["\(.applicationName) のストリップを切り替える"],
-            shortTitle: "ストリップを出す・隠す",
+            phrases: ["\(.applicationName) のウインドウバーを切り替える"],
+            shortTitle: "ウインドウバーを出す・隠す",
             systemImageName: "sidebar.left"
         )
         AppShortcut(

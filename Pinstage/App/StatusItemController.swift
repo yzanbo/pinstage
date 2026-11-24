@@ -37,7 +37,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        let toggle = item(strips.anyShown ? "ストリップを隠す" : "ストリップを出す", action: #selector(toggleStrip))
+        let toggle = item(strips.anyShown ? "ウインドウバーを隠す" : "ウインドウバーを出す", action: #selector(toggleStrip))
         showShortcut(for: .toggleStrip, on: toggle)
         menu.addItem(toggle)
         let search = item("検索…", action: #selector(openSearch))
@@ -45,7 +45,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(search)
         menu.addItem(.separator())
 
-        menu.addItem(.sectionHeader(title: "ストリップ"))
+        menu.addItem(.sectionHeader(title: "ウインドウバー"))
         for mode in StripMode.allCases {
             let modeItem = item(mode.title, action: #selector(selectMode(_:)))
             modeItem.representedObject = mode.rawValue

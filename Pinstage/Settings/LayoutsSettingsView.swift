@@ -10,7 +10,7 @@ struct LayoutsSettingsView: View {
         SettingsPane {
             Section {
                 if stage.library.customLayouts.isEmpty {
-                    SettingsNote("まだ型がありません。「新しい型…」で作るか、ストリップの並べ方のメニューで「いまの並びを型として登録」を選んでください。")
+                    SettingsNote("まだ型がありません。「新しい型…」で作るか、ウインドウバーの並べ方のメニューで「いまの並びを型として登録」を選んでください。")
                 }
                 ForEach(stage.library.customLayouts) { layout in
                     HStack(spacing: 12) {
@@ -48,7 +48,7 @@ struct LayoutsSettingsView: View {
             } header: {
                 SettingTitle(
                     "登録した型",
-                    info: "型は並べ方の形だけを覚えます（どのアプリかは覚えません）。重ねたり、間を空けたりした形も作れます。消した型を使っていたグループは「自動（均等）」になります。"
+                    info: "型は並べ方の形だけを覚えます（どのアプリかは覚えません）。重ねたり、間を空けたりした形も作れます。消した型を使っていたグループは「自動（枚数に合わせる）」になります。"
                 )
             } footer: {
                 HStack {

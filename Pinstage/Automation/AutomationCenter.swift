@@ -73,7 +73,7 @@ enum AutomationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .groupNotFound(let key): "グループ「\(key)」が見つかりません。"
-        case .emptyStage: "ステージにウインドウがありません。ストリップでウインドウを選んでから保存してください。"
+        case .emptyStage: "ステージにウインドウがありません。ウインドウバーでウインドウを選んでから保存してください。"
         case .notReady: "Pinstage の用意ができていません。少し待ってから、もう一度お試しください。"
         }
     }
