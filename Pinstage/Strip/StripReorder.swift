@@ -13,10 +13,19 @@ final class ReorderState {
     var frames: [Int: CGRect] = [:]
     /// 落とす位置（その番号の行の前。並びが変わらない位置なら nil）
     var dropIndex: Int?
+    /// ドラッグしている行の番号（ドラッグしていなければ nil）
+    var draggedIndex: Int?
     /// ドラッグしている行について一緒に動く行の番号（同じアプリをまとめて動かしている間。ドラッグしている行は含まない）
     var followers: Set<Int> = []
     /// 一緒に動く行の、ずらす量（ドラッグしている行と同じ）
     var followOffset: CGSize = .zero
+
+    /// ドラッグで動いている行か（ドラッグしている行と、一緒に動く行）。
+    /// 動いている行は、ほかの行より手前に描く。並べる側で、行のいちばん外側に `.zIndex(reorder.isMoving(index) ? 1 : 0)` を付けること
+    /// （zIndex は、あとにほかの修飾が続くと効かないので、ReorderDrag の中では付けられない）
+    func isMoving(_ index: Int) -> Bool {
+        draggedIndex == index || followers.contains(index)
+    }
 }
 
 /// 一覧の並べ方（落とす位置の決め方と、落とす位置に引く線の向きが変わる）
@@ -84,12 +93,16 @@ struct ReorderDrag: ViewModifier {
         DesktopTrace.log("並べ替えの線", "\(space) \(layout) \(index + 1)/\(count) 枠\(reorder.frames.count) → \(outcome())")
     }
 
+    /// ほかの行のドラッグについて動いているか（同じアプリのまとまりを動かしている間の、ドラッグしていないほうの行）
+    private var isFollowing: Bool {
+        reorder.followers.contains(index)
+    }
+
     func body(content: Content) -> some View {
-        content
-            // 枠は、ずらす前（offset の前）の位置で覚える
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(space)) } action: { reorder.frames[index] = $0 }
-            .offset(offset)
-            .zIndex(offset == .zero ? 0 : 1)
+        // ドラッグしている行は動かした量だけ、一緒に動く行は、ドラッグしている行と同じ量だけずらす
+        let shift = isFollowing ? reorder.followOffset : offset
+        return content
+            .offset(shift)
             .opacity(offset == .zero ? 1 : 0.85)
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named(space))
@@ -97,6 +110,8 @@ struct ReorderDrag: ViewModifier {
                         guard hypot(value.translation.width, value.translation.height) > Self.threshold else { return }
                         strip.isDragging = true
                         offset = value.translation
+                        // 変わったときだけ入れる（同じ値でも入れ直すと、見ている行がすべて描き直される）
+                        if reorder.draggedIndex != index { reorder.draggedIndex = index }
                         let group = hoveredGroup()
                         if onDropOnGroup != nil { strip.groupTargets.hovered = group }
                         if group != nil {
@@ -120,7 +135,8 @@ struct ReorderDrag: ViewModifier {
                         }
                         // 同じアプリのまとまりは、ドラッグしている間ずっと、まとめて動かす
                         if let cluster, cluster.count > 1 {
-                            reorder.followers = Set(cluster).subtracting([index])
+                            let followers = Set(cluster).subtracting([index])
+                            if reorder.followers != followers { reorder.followers = followers }
                             reorder.followOffset = value.translation
                         }
                     }
@@ -131,6 +147,7 @@ struct ReorderDrag: ViewModifier {
                         offset = .zero
                         strip.isDragging = false
                         reorder.dropIndex = nil
+                        reorder.draggedIndex = nil
                         reorder.followers = []
                         reorder.followOffset = .zero
                         if onDropOnGroup != nil { strip.groupTargets.hovered = nil }
@@ -145,6 +162,10 @@ struct ReorderDrag: ViewModifier {
                         }
                     }
             )
+            // 行の枠は、ずらす前の位置で覚える。必ず、ずらし（offset）の外側で測る。
+            // 内側で測ると、ずらした量が枠に入り、ドラッグしている行（と、一緒に動く行）の枠がポインタについて動く。
+            // すると、落とす位置の判定が自分の行に引っかかって「動かない位置」になり、線が出ない・ちらつく（行の上半分をつかむと起きる）
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(space)) } action: { reorder.frames[index] = $0 }
     }
 }
 

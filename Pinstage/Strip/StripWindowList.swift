@@ -143,6 +143,8 @@ struct WindowSection: View {
             .padding(join.axis == .horizontal ? .leading : .top, index == 0 || isGrid || join.previous ? 0 : spacing)
             // 開いたウインドウは、その位置で広がって現れ、閉じたウインドウは縮んで消える（Chrome のタブと同じ）
             .transition(Self.rowTransition(horizontal: arrangement == .horizontal))
+            // ドラッグで動いている行は、ほかの行より手前に描く（いちばん外側に付ける。内側に付けると効かない）
+            .zIndex(reorder.isMoving(index) ? 1 : 0)
         }
     }
 }
@@ -226,9 +228,6 @@ private struct WindowRow: View {
                 strip.setRowVisible(item.id, visible)
                 if visible, showsThumbnail, thumbnails.images[item.id] == nil { thumbnails.captureNow() }
             }
-            // ほかの行のドラッグについて動く（同じアプリをまとめて動かしている間）
-            .offset(reorder.followers.contains(index) ? reorder.followOffset : .zero)
-            .zIndex(reorder.followers.contains(index) ? 1 : 0)
             .contextMenu {
                 if isOnStage {
                     Button("ステージから外す") { stage.remove(item, on: strip.screen) }

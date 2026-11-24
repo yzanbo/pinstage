@@ -61,11 +61,6 @@ struct MemberDrag: ViewModifier {
         if let context {
             let key = MemberKey(groupID: context.groupID, index: index)
             content
-                // 枠は、ずらす前（offset の前）の位置で覚える
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(GroupDropTargets.space)) } action: {
-                    context.strip.groupTargets.memberFrames[key] = $0
-                }
-                .onDisappear { context.strip.groupTargets.memberFrames[key] = nil }
                 // 同じグループのほかのアイコンを、ここに重ねているとき（並べ替えの行き先）は光らせる
                 .overlay {
                     if context.strip.groupTargets.hoveredMember == key {
@@ -117,6 +112,11 @@ struct MemberDrag: ViewModifier {
                             }
                         }
                 )
+                // 枠は、ずらす前の位置で覚える。ずらし（offset）の外側で測る（内側で測ると、ずらした量が枠に入る）
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(GroupDropTargets.space)) } action: {
+                    context.strip.groupTargets.memberFrames[key] = $0
+                }
+                .onDisappear { context.strip.groupTargets.memberFrames[key] = nil }
                 .help("同じグループのアイコンへドラッグで並び順を変える・グループの外へドラッグで外す・ほかのグループへドラッグで移す")
         } else {
             content

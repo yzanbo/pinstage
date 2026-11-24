@@ -42,6 +42,8 @@ struct GroupSection: View {
                 visibleCount: visible.count,
                 reorder: reorder, stage: stage, shortcuts: shortcuts, strip: strip, actions: actions
             )
+            // ドラッグで動いている行は、ほかの行より手前に描く（いちばん外側に付ける。内側に付けると効かない）
+            .zIndex(reorder.isMoving(position) ? 1 : 0)
         }
     }
 
@@ -168,8 +170,6 @@ private struct GroupRow: View {
                 .opacity(isDropTarget ? 1 : 0)
                 .allowsHitTesting(false)
         )
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(GroupDropTargets.space)) } action: { strip.groupTargets.frames[group.id] = $0 }
-        .onDisappear { strip.groupTargets.frames[group.id] = nil }
         .modifier(ReorderDrag(
             index: position,
             count: visibleCount,
@@ -180,6 +180,9 @@ private struct GroupRow: View {
             onTap: { Task { await stage.recall(group, fallback: screen) } },
             onMove: { move(to: $0) }
         ))
+        // ウインドウ・ほかのグループの中身を落とす先としての枠。並べ替えのドラッグのずらしの外側で測る（内側で測ると、ドラッグしている間、枠も一緒に動く）
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(GroupDropTargets.space)) } action: { strip.groupTargets.frames[group.id] = $0 }
+        .onDisappear { strip.groupTargets.frames[group.id] = nil }
         .help(helpText(running: running))
         .contextMenu {
             Button("編集…") { actions.editGroup(group) }
