@@ -356,24 +356,26 @@ final class StageController {
         let visible = screen.visibleFrame
         let hasStrip = stripScreens.contains { Self.displayKey($0) == Self.displayKey(screen) }
         let frame = hasStrip
-            ? StripGeometry.stageFrame(in: visible, mode: settings.mode, width: settings.effectiveWidth)
+            ? StripGeometry.stageFrame(in: visible, mode: settings.mode, edge: settings.edge, thickness: settings.effectiveThickness)
             : visible
         return ScreenCoordinates.toAccessibility(frame, primaryScreenHeight: primaryHeight)
     }
 
-    /// ストリップを狭めたとき、ストリップの横（前のステージの左端）にくっつけていたウインドウを、新しい左端まで広げる（右端はそのまま）。
+    /// ステージの範囲が広がったとき（ストリップを狭めた・ほかの辺へ移した）、
+    /// 前のステージの端（ストリップの横）にくっつけていたウインドウを、新しい端まで広げる（反対側の端はそのまま）。
     /// ステージに出しているウインドウは、並べ直すので除く
-    func followNarrowedStrip(from old: StripSettings) {
+    func followWidenedStage(from old: StripSettings) {
         guard old.mode == .alwaysShown, stripSettings.mode == .alwaysShown else { return }
         let locator = DisplayLocator()
         for screen in stripScreens {
             let key = Self.displayKey(screen)
-            let oldLeft = stageArea(on: screen, settings: old).minX
-            let newLeft = stageArea(on: screen).minX
+            let oldArea = stageArea(on: screen, settings: old)
+            let newArea = stageArea(on: screen)
+            guard oldArea != newArea else { continue }
             let onStage = Set(stage(on: screen).selection.members)
             for item in windows where !item.isMinimized && currentSpaceIDs.contains(item.id) && !onStage.contains(item.id) {
                 guard let frame = AXWindow.frame(of: item.id),
-                      let widened = StripAvoidance.following(frame, stageLeftFrom: oldLeft, to: newLeft),
+                      let widened = StripAvoidance.following(frame, stageFrom: oldArea, to: newArea),
                       locator.key(for: frame) == key
                 else { continue }
                 AXWindow.setFrame(item.id, pid: item.pid, to: widened)

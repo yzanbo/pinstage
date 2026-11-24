@@ -151,19 +151,19 @@ struct StripAvoidanceTests {
     @Test("画面いっぱいに広がったウインドウは、ステージいっぱいにする")
     func zoomed() {
         let zoomed = CGRect(x: 0, y: 25, width: 1600, height: 950)
-        #expect(StripAvoidance.adjusted(zoomed, stage: stage) == stage)
+        #expect(StripAvoidance.adjusted(zoomed, stage: stage, edge: .left) == stage)
     }
 
     @Test("重なっているだけのウインドウは、大きさを変えずに右へずらす")
     func overlapping() {
         let window = CGRect(x: 100, y: 200, width: 600, height: 400)
-        #expect(StripAvoidance.adjusted(window, stage: stage) == CGRect(x: 246, y: 200, width: 600, height: 400))
+        #expect(StripAvoidance.adjusted(window, stage: stage, edge: .left) == CGRect(x: 246, y: 200, width: 600, height: 400))
     }
 
     @Test("重なっていない・少しだけのはみ出しなら、そのまま")
     func untouched() {
-        #expect(StripAvoidance.adjusted(CGRect(x: 300, y: 100, width: 500, height: 400), stage: stage) == nil)
-        #expect(StripAvoidance.adjusted(CGRect(x: 245, y: 100, width: 500, height: 400), stage: stage) == nil)
+        #expect(StripAvoidance.adjusted(CGRect(x: 300, y: 100, width: 500, height: 400), stage: stage, edge: .left) == nil)
+        #expect(StripAvoidance.adjusted(CGRect(x: 245, y: 100, width: 500, height: 400), stage: stage, edge: .left) == nil)
     }
 
     @Test("初期設定はオン。保存して読み戻せる")
@@ -188,15 +188,15 @@ struct ZoomMemoryTests {
     @Test("広げたらステージいっぱいに収め、もう一度広げたら元の大きさに戻す")
     func toggle() {
         // 1 回目のダブルクリック: 画面いっぱいに広がる → ステージいっぱいに収める
-        let first = StripAvoidance.resolve(current: full, previous: user, memory: .init(), stage: stage)
+        let first = StripAvoidance.resolve(current: full, previous: user, memory: .init(), stage: stage, edge: .left)
         #expect(first.target == stage)
         #expect(first.memory.restore == user)
         // 収めたあとは、動かさない
-        let settled = StripAvoidance.resolve(current: stage, previous: stage, memory: first.memory, stage: stage)
+        let settled = StripAvoidance.resolve(current: stage, previous: stage, memory: first.memory, stage: stage, edge: .left)
         #expect(settled.target == nil)
         #expect(settled.memory == first.memory)
         // 2 回目のダブルクリック: また画面いっぱいに広がる → 元の大きさに戻す
-        let second = StripAvoidance.resolve(current: full, previous: stage, memory: settled.memory, stage: stage)
+        let second = StripAvoidance.resolve(current: full, previous: stage, memory: settled.memory, stage: stage, edge: .left)
         #expect(second.target == user)
         #expect(second.memory == .init())
     }
@@ -204,7 +204,7 @@ struct ZoomMemoryTests {
     @Test("利用者が動かしたら、覚え書きを消す")
     func userMoved() {
         let memory = StripAvoidance.ZoomMemory(restore: user, adjusted: stage)
-        let moved = StripAvoidance.resolve(current: CGRect(x: 500, y: 100, width: 600, height: 400), previous: stage, memory: memory, stage: stage)
+        let moved = StripAvoidance.resolve(current: CGRect(x: 500, y: 100, width: 600, height: 400), previous: stage, memory: memory, stage: stage, edge: .left)
         #expect(moved.target == nil)
         #expect(moved.memory == .init())
     }
@@ -212,20 +212,63 @@ struct ZoomMemoryTests {
     @Test("ストリップを狭めたら、ストリップの横にくっつけていたウインドウを、新しい幅まで広げる（右端はそのまま）")
     func followNarrowedStrip() {
         // ステージの左端が 246 → 176 に動いた
+        let narrowed = CGRect(x: 176, y: 25, width: 1424, height: 950)
         let attached = CGRect(x: 246, y: 25, width: 800, height: 600)
-        #expect(StripAvoidance.following(attached, stageLeftFrom: 246, to: 176) == CGRect(x: 176, y: 25, width: 870, height: 600))
+        #expect(StripAvoidance.following(attached, stageFrom: stage, to: narrowed) == CGRect(x: 176, y: 25, width: 870, height: 600))
         // 少しのずれ（2pt まで）は、くっついているとみなす
-        #expect(StripAvoidance.following(attached.offsetBy(dx: 2, dy: 0), stageLeftFrom: 246, to: 176)?.minX == 176)
+        #expect(StripAvoidance.following(attached.offsetBy(dx: 2, dy: 0), stageFrom: stage, to: narrowed)?.minX == 176)
         // 離れたところにあるウインドウは動かさない
-        #expect(StripAvoidance.following(CGRect(x: 400, y: 25, width: 800, height: 600), stageLeftFrom: 246, to: 176) == nil)
+        #expect(StripAvoidance.following(CGRect(x: 400, y: 25, width: 800, height: 600), stageFrom: stage, to: narrowed) == nil)
         // 広げたとき（左端が右へ動いた）は、ここでは動かさない（重なった分は、収める処理が右へ押し出す）
-        #expect(StripAvoidance.following(CGRect(x: 176, y: 25, width: 800, height: 600), stageLeftFrom: 176, to: 246) == nil)
+        #expect(StripAvoidance.following(CGRect(x: 176, y: 25, width: 800, height: 600), stageFrom: narrowed, to: stage) == nil)
+    }
+
+    @Test("ほかの辺のストリップを狭めたときも、その辺にくっつけていたウインドウを広げる")
+    func followOnOtherEdges() {
+        let full = CGRect(x: 0, y: 25, width: 1600, height: 950)
+        // 右のストリップをたたんだ（ステージの右端が 1354 → 1532）
+        let rightOld = CGRect(x: 0, y: 25, width: 1354, height: 950)
+        let rightNew = CGRect(x: 0, y: 25, width: 1532, height: 950)
+        #expect(StripAvoidance.following(rightOld, stageFrom: rightOld, to: rightNew) == rightNew)
+        // 下のストリップをたたんだ（アクセシビリティの座標では、下の辺は maxY）
+        let bottomOld = CGRect(x: 0, y: 25, width: 1600, height: 886)
+        let bottomNew = CGRect(x: 0, y: 25, width: 1600, height: 904)
+        #expect(StripAvoidance.following(CGRect(x: 100, y: 400, width: 500, height: 511), stageFrom: bottomOld, to: bottomNew) == CGRect(x: 100, y: 400, width: 500, height: 529))
+        // ストリップを左から右へ移した: 前のステージいっぱいのウインドウは、左へ広がる（右にはみ出した分は、収める処理が直す）
+        #expect(StripAvoidance.following(stage, stageFrom: stage, to: rightOld) == full)
+    }
+
+    @Test("右・上・下のストリップに重なったウインドウも、ステージのほうへずらす")
+    func otherEdges() {
+        // 右のストリップ（ステージは左側）
+        let left = CGRect(x: 0, y: 25, width: 1354, height: 950)
+        #expect(StripAvoidance.adjusted(CGRect(x: 900, y: 200, width: 600, height: 400), stage: left, edge: .right) == CGRect(x: 754, y: 200, width: 600, height: 400))
+        #expect(StripAvoidance.adjusted(CGRect(x: 700, y: 200, width: 600, height: 400), stage: left, edge: .right) == nil)
+        // 上のストリップ（アクセシビリティの座標では、上の辺は minY。ステージは下側）
+        let lower = CGRect(x: 0, y: 89, width: 1600, height: 886)
+        #expect(StripAvoidance.adjusted(CGRect(x: 100, y: 40, width: 600, height: 400), stage: lower, edge: .top) == CGRect(x: 100, y: 89, width: 600, height: 400))
+        // 下のストリップ（ステージは上側）
+        let upper = CGRect(x: 0, y: 25, width: 1600, height: 886)
+        #expect(StripAvoidance.adjusted(CGRect(x: 100, y: 600, width: 600, height: 400), stage: upper, edge: .bottom) == CGRect(x: 100, y: 511, width: 600, height: 400))
+        // ストリップのない側へのはみ出しは、気にしない
+        #expect(StripAvoidance.adjusted(CGRect(x: -100, y: 100, width: 600, height: 400), stage: upper, edge: .bottom) == nil)
+    }
+
+    @Test("上下のストリップでは、縦いっぱいに広げたかで、広げる・元に戻すを決める")
+    func zoomWithBar() {
+        let upper = CGRect(x: 0, y: 25, width: 1600, height: 886)
+        let zoomed = CGRect(x: 0, y: 25, width: 1600, height: 950)
+        let first = StripAvoidance.resolve(current: zoomed, previous: user, memory: .init(), stage: upper, edge: .bottom)
+        #expect(first.target == upper)
+        #expect(first.memory.restore == user)
+        let second = StripAvoidance.resolve(current: zoomed, previous: upper, memory: first.memory, stage: upper, edge: .bottom)
+        #expect(second.target == user)
     }
 
     @Test("重なっただけ（広げていない）なら、右へずらすだけで覚えない")
     func overlapOnly() {
         let window = CGRect(x: 100, y: 200, width: 600, height: 400)
-        let result = StripAvoidance.resolve(current: window, previous: nil, memory: .init(), stage: stage)
+        let result = StripAvoidance.resolve(current: window, previous: nil, memory: .init(), stage: stage, edge: .left)
         #expect(result.target == CGRect(x: 246, y: 200, width: 600, height: 400))
         #expect(result.memory.restore == nil)
     }

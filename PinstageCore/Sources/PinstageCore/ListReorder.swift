@@ -15,6 +15,14 @@ public enum ListReorder {
         return count
     }
 
+    /// 横に並べた一覧（上下に出したストリップ）で、落とす位置を、ポインタの x から決める（その番号のものの前に入れる。count なら最後）
+    public static func dropIndex(forX x: CGFloat, frames: [Int: CGRect], count: Int) -> Int {
+        for index in 0..<count {
+            if let frame = frames[index], x < frame.midX { return index }
+        }
+        return count
+    }
+
     /// アイコンを格子に並べたときの、落とす位置（左から右へ、上から下へ並ぶ順番。その番号の前に入れる）
     ///
     /// ポインタより下の行の最初、またはポインタと同じ行でポインタより右にある（真ん中より右の）ものの前に入れる。

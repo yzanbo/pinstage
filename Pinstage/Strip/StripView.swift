@@ -10,11 +10,34 @@ struct StripView: View {
     let strip: StripController
     let actions: AppActions
 
-    private var isIconOnly: Bool { stage.stripSettings.itemSize.isIconOnly }
+    /// アイコンだけの細い帯で出しているか（左右のストリップで、アイコンの並びを狭めたとき）
+    private var isIconOnly: Bool { strip.isCompact }
 
     var body: some View {
+        Group {
+            if strip.isHorizontal {
+                bar
+            } else {
+                column
+            }
+        }
+        // グループへの出し入れで、ポインタとグループの行の位置を比べる座標
+        .coordinateSpace(.named(GroupDropTargets.space))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.separator))
+        // 幅を変えるつまみは、ステージの側の縁に出す（右のストリップなら左の縁）
+        .overlay(alignment: strip.edge == .right ? .leading : .trailing) {
+            // 上下のストリップの高さは、形式で決まるので、つまみは出さない
+            if !strip.isHorizontal {
+                ResizeEdge(strip: strip)
+            }
+        }
+    }
+
+    /// 左右に出したとき: 上から、帯・案内・ウインドウ・グループ・並べ方を縦に並べる
+    private var column: some View {
         VStack(alignment: .leading, spacing: StripStyle.sectionSpacing) {
-            StripToolbar(stage: stage, shortcuts: shortcuts, actions: actions)
+            StripToolbar(stage: stage, shortcuts: shortcuts, actions: actions, compact: isIconOnly)
             if !stage.isTrusted {
                 StripNotice.permission(compact: isIconOnly)
             }
@@ -23,25 +46,43 @@ struct StripView: View {
             }
             WindowSection(stage: stage, thumbnails: thumbnails, strip: strip)
             GroupSection(stage: stage, shortcuts: shortcuts, strip: strip, actions: actions)
-            LayoutControls(stage: stage, screen: strip.screen, actions: actions)
+            LayoutControls(stage: stage, screen: strip.screen, actions: actions, compact: isIconOnly)
         }
         .padding(.horizontal, isIconOnly ? 6 : 10)
         .padding(.vertical, isIconOnly ? 8 : 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // グループへの出し入れで、ポインタとグループの行の位置を比べる座標
-        .coordinateSpace(.named(GroupDropTargets.space))
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.separator))
-        .overlay(alignment: .trailing) {
-            // アイコンだけのときは幅を決めているので、幅を変えるつまみは出さない
-            if !isIconOnly {
-                ResizeEdge(strip: strip)
+    }
+
+    /// 上下に出したとき: 左から、帯・案内・ウインドウ・グループ・並べ方を横に並べる（案内は、アイコンのボタンにする）
+    private var bar: some View {
+        HStack(spacing: 8) {
+            StripToolbar(stage: stage, shortcuts: shortcuts, actions: actions, compact: false, horizontal: true)
+            if !stage.isTrusted {
+                StripNotice.permission(compact: true).fixedSize()
             }
+            if stage.isSystemStageManagerOn, !stage.dismissedStageManagerNotice {
+                StripNotice.stageManager(compact: true) { stage.dismissedStageManagerNotice = true }.fixedSize()
+            }
+            BarDivider()
+            WindowSection(stage: stage, thumbnails: thumbnails, strip: strip)
+            GroupSection(stage: stage, shortcuts: shortcuts, strip: strip, actions: actions)
+            BarDivider()
+            LayoutControls(stage: stage, screen: strip.screen, actions: actions, compact: false, horizontal: true)
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, StripRowSizing.barPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
-/// 右の縁。ドラッグしてストリップの幅を変える
+/// 横長の帯の、欄と欄の間の線
+struct BarDivider: View {
+    var body: some View {
+        Divider().frame(height: 20)
+    }
+}
+
+/// ステージの側の縁（左右のストリップ）。ドラッグしてストリップの幅を変える
 private struct ResizeEdge: View {
     let strip: StripController
     @State private var isHovering = false
@@ -62,7 +103,7 @@ private struct ResizeEdge: View {
                 .opacity(isHovering || isDragging ? 0.8 : 0)
         }
         .frame(maxHeight: .infinity)
-        .pointerStyle(.frameResize(position: .trailing))
+        .pointerStyle(.frameResize(position: strip.edge == .right ? .leading : .trailing))
         .onHover { isHovering = $0 }
         .gesture(
             DragGesture(minimumDistance: 1, coordinateSpace: .global)

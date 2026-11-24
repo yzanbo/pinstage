@@ -13,6 +13,6 @@ enum SystemStageManager {
 
     /// システム設定の「デスクトップと Dock」を開く（ステージマネージャをオフにできる）
     static func openSettings() {
-        NSWorkspace.shared.open(urlString: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")
+        SystemBars.openDockSettings()
     }
 }

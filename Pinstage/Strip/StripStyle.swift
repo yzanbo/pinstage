@@ -87,11 +87,21 @@ struct StripToolbar: View {
     let stage: StageController
     let shortcuts: ShortcutCenter
     let actions: AppActions
-
-    private var isIconOnly: Bool { stage.stripSettings.itemSize.isIconOnly }
+    /// アイコンだけの細い帯で出しているか（アイコンの並びを狭めたとき）
+    let compact: Bool
+    /// 横長の帯（上下のストリップ）に並べるか
+    var horizontal = false
 
     var body: some View {
-        if isIconOnly {
+        if horizontal {
+            // 横長の帯: 横に並べる
+            HStack(spacing: 2) {
+                SearchField(shortcut: shortcuts.shortcut(for: .search)?.displayString, action: actions.openSearch)
+                    .frame(width: 110)
+                StripLookButton(stage: stage)
+                StripModeButton(stage: stage)
+            }
+        } else if compact {
             // 細い帯: アイコンを縦に並べる
             VStack(spacing: 2) {
                 Button { actions.openSearch() } label: { StripIconLabel(systemName: "magnifyingglass") }
@@ -149,7 +159,7 @@ private struct SearchField: View {
     }
 }
 
-/// ストリップの見た目（細い帯・アイコンの並び・一覧・サムネイル）を選ぶボタン
+/// ストリップの見た目（形式・大きさ・位置）を選ぶボタン
 struct StripLookButton: View {
     let stage: StageController
 
@@ -157,18 +167,40 @@ struct StripLookButton: View {
 
     var body: some View {
         Menu {
-            Picker("見た目", selection: Binding(get: { look }, set: { stage.stripSettings.itemSize = $0 })) {
+            Picker("形式", selection: Binding(get: { look }, set: { stage.stripSettings.itemSize = $0 })) {
                 ForEach(StripItemSize.allCases) { size in
                     Label(size.title, systemImage: size.symbolName).tag(size)
                 }
             }
             .pickerStyle(.inline)
+            Section("大きさ") {
+                Picker("大きさ", selection: Binding(
+                    get: { stage.stripSettings.iconSize },
+                    set: { stage.stripSettings.iconSize = $0 }
+                )) {
+                    ForEach(StripIconSize.allCases) { size in
+                        Text(size.title).tag(size)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+            Section("位置") {
+                Picker("ストリップの位置", selection: Binding(
+                    get: { stage.stripSettings.edge },
+                    set: { stage.stripSettings.edge = $0 }
+                )) {
+                    ForEach(StripEdge.allCases) { edge in
+                        Label(edge.title, systemImage: edge.symbolName).tag(edge)
+                    }
+                }
+            }
         } label: {
             StripIconLabel(systemName: look.symbolName)
         }
         .stripMenuButton()
         .fixedSize()
-        .help("見た目: \(look.title)")
+        .help("見た目: \(look.title)・\(stage.stripSettings.iconSize.title)")
     }
 }
 
@@ -177,6 +209,7 @@ struct StripModeButton: View {
     let stage: StageController
 
     private var mode: StripMode { stage.stripSettings.mode }
+    private var edgeTitle: String { stage.stripSettings.edge.title }
 
     var body: some View {
         Button {
@@ -186,8 +219,8 @@ struct StripModeButton: View {
         }
         .buttonStyle(.plain)
         .help(mode == .alwaysShown
-            ? "常に出しています。押すと、左に寄せたときだけ出します"
-            : "左に寄せたときだけ出しています。押すと、常に出します")
+            ? "常に出しています。押すと、画面の\(edgeTitle)の端に寄せたときだけ出します"
+            : "画面の\(edgeTitle)の端に寄せたときだけ出しています。押すと、常に出します")
     }
 }
 

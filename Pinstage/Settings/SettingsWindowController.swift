@@ -90,6 +90,8 @@ private final class SettingsTabViewController: NSTabViewController {
 }
 
 extension StripMode: SettingsOption {}
+extension StripEdge: SettingsOption {}
 extension StripItemSize: SettingsOption {}
+extension StripIconSize: SettingsOption {}
 extension StripDisplays: SettingsOption {}
 extension SingleWindowSize: SettingsOption {}

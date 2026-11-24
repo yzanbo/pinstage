@@ -7,6 +7,10 @@ struct LayoutControls: View {
     let stage: StageController
     let screen: NSScreen
     let actions: AppActions
+    /// アイコンだけの細い帯で出しているか（アイコンの並びを狭めたとき）
+    let compact: Bool
+    /// 横長の帯（上下のストリップ）に並べるか
+    var horizontal = false
 
     private var current: StageBoard<AXUIElement>.Stage { stage.stage(on: screen) }
 
@@ -19,15 +23,42 @@ struct LayoutControls: View {
     }
 
     var body: some View {
-        if stage.stripSettings.itemSize.isIconOnly {
-            compact
+        if horizontal {
+            barControls
+        } else if compact {
+            compactControls
         } else {
             full
         }
     }
 
+    /// 横長の帯のとき: 並べ方・余白・グループとして保存・記録を、横に並べる
+    private var barControls: some View {
+        HStack(spacing: 4) {
+            layoutMenu { LayoutPill(title: stage.layoutTitle(current.layout)) }
+                .frame(width: 130)
+                .help("並べ方を選ぶ・型を作る")
+            gapButton(explainsDisabled: true)
+            saveIconButton
+            recordButton(help: "見えている画面を記録（位置・大きさ・重なりごと、新しいグループに）")
+        }
+    }
+
+    /// グループとして保存する、アイコンだけのボタン
+    private var saveIconButton: some View {
+        Button {
+            stage.saveStageAsGroup(on: screen)
+        } label: {
+            Image(systemName: "plus.square.on.square")
+        }
+        .buttonStyle(StripPrimaryButtonStyle())
+        .frame(width: 40)
+        .disabled(current.selection.isEmpty)
+        .help("グループとして保存")
+    }
+
     /// アイコンだけのとき: 並べ方のメニュー・余白・グループとして保存を、アイコンのボタンで縦に並べる
-    private var compact: some View {
+    private var compactControls: some View {
         VStack(spacing: 4) {
             Divider().padding(.horizontal, 6)
             layoutMenu { StripIconLabel(systemName: "rectangle.split.3x1") }
@@ -36,15 +67,7 @@ struct LayoutControls: View {
 
             gapButton(explainsDisabled: false)
 
-            Button {
-                stage.saveStageAsGroup(on: screen)
-            } label: {
-                Image(systemName: "plus.square.on.square")
-            }
-            .buttonStyle(StripPrimaryButtonStyle())
-            .frame(width: 40)
-            .disabled(current.selection.isEmpty)
-            .help("グループとして保存")
+            saveIconButton
 
             recordButton(help: "見えている画面を記録（位置・大きさ・重なりごと、新しいグループに）")
         }

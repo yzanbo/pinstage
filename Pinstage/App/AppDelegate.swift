@@ -4,7 +4,7 @@ import PinstageCore
 /// アプリの入口
 ///
 /// メニューバーに常駐し、ふだんは Dock には出さない（Info.plist の LSUIElement。設定・型の編集を開いている間だけ出す。DockIcon）。
-/// ディスプレイの左端にストリップを出し、そこからステージ（最前面に出すウインドウの組み合わせ）を操作する。
+/// ディスプレイの端（左・右・上・下から選ぶ）にストリップを出し、そこからステージ（最前面に出すウインドウの組み合わせ）を操作する。
 @main
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let stage = StageController()
@@ -27,14 +27,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     static func main() {
         #if DEBUG
-        // 開発用: ストリップの見た目を、見本のデータで画像に描き出して終わる（--render-strip-preview 書き出す場所 [見た目] [幅] [場面]）
+        // 開発用: ストリップの見た目を、見本のデータで画像に描き出して終わる（--render-strip-preview 書き出す場所 [見た目] [幅] [場面] [辺]）
         if let index = CommandLine.arguments.firstIndex(of: "--render-strip-preview"), CommandLine.arguments.count > index + 1 {
             _ = NSApplication.shared
             let arguments = CommandLine.arguments
-            let look = arguments.count > index + 2 ? StripItemSize(rawValue: arguments[index + 2]) : nil
+            let look = arguments.count > index + 2 ? StripPreview.Look(rawValue: arguments[index + 2]) : nil
             let width = arguments.count > index + 3 ? Double(arguments[index + 3]).map { CGFloat($0) } : nil
             let scenario = arguments.count > index + 4 ? StripPreview.Scenario(rawValue: arguments[index + 4]) : nil
-            StripPreview.render(to: URL(fileURLWithPath: arguments[index + 1]), look: look ?? .list, width: width, scenario: scenario ?? .normal)
+            let edge = arguments.count > index + 5 ? StripEdge(rawValue: arguments[index + 5]) : nil
+            StripPreview.render(
+                to: URL(fileURLWithPath: arguments[index + 1]),
+                look: look ?? .list, width: width, scenario: scenario ?? .normal, edge: edge ?? .left
+            )
             exit(0)
         }
         // 開発用: ストリップのほかの画面を描き出して終わる（--render-view-preview 書き出す場所 画面）

@@ -6,7 +6,8 @@ import SwiftUI
 /// 開発用: 画面の見た目を、見本のデータで PNG に描き出す（アプリを起動せずに、見た目を確かめるため）
 ///
 /// 使い方:
-/// - ストリップ: Pinstage.app/Contents/MacOS/Pinstage --render-strip-preview 書き出す場所.png [見た目（medium など）] [幅] [場面]
+/// - ストリップ: Pinstage.app/Contents/MacOS/Pinstage --render-strip-preview 書き出す場所.png [見た目（grid・list・thumbnail。後ろに Small・Medium・Large を付けると大きさ。省けば小）] [幅] [場面] [辺（left・right・top・bottom）]
+///   上下の辺では、幅は帯の長さ（省けば 1280）
 /// - ほかの画面: Pinstage.app/Contents/MacOS/Pinstage --render-view-preview 書き出す場所.png 画面（groupEditor など）
 enum StripPreview {
     /// ストリップを描く場面
@@ -48,16 +49,48 @@ enum StripPreview {
         let screen: NSScreen
     }
 
-    static func render(to url: URL, look: StripItemSize, width: CGFloat? = nil, scenario: Scenario = .normal) {
+    /// ストリップの見た目（形式と大きさ）。「list」「gridLarge」「thumbnailMedium」のように、形式の後ろに大きさ（Small・Medium・Large）を付ける。
+    /// 大きさを省けば「小」（初期設定）
+    struct Look {
+        let format: StripItemSize
+        let iconSize: StripIconSize
+
+        init(format: StripItemSize, iconSize: StripIconSize = .small) {
+            self.format = format
+            self.iconSize = iconSize
+        }
+
+        init?(rawValue: String) {
+            guard let format = StripItemSize.allCases.first(where: { rawValue.hasPrefix($0.rawValue) }) else { return nil }
+            let suffix = rawValue.dropFirst(format.rawValue.count).lowercased()
+            if suffix.isEmpty {
+                self.init(format: format)
+            } else if let size = StripIconSize(rawValue: suffix) {
+                self.init(format: format, iconSize: size)
+            } else {
+                return nil
+            }
+        }
+
+        static let list = Look(format: .list)
+    }
+
+    static func render(to url: URL, look: Look, width: CGFloat? = nil, scenario: Scenario = .normal, edge: StripEdge = .left) {
         withSample(scenario: scenario) { sample in
             let stage = sample.stage
-            stage.stripSettings.itemSize = look
+            stage.stripSettings.itemSize = look.format
+            stage.stripSettings.iconSize = look.iconSize
             stage.stripSettings.mode = .alwaysShown
-            if let width { stage.stripSettings.stripWidth = width }
+            stage.stripSettings.edge = edge
+            // いまの形式の幅として入れる（範囲の中に収まる。アイコンの並びは、1 列になる幅まで狭められる）
+            if let width, !edge.isHorizontal { stage.stripSettings.width = width }
             let strip = StripController(screen: sample.screen, stage: stage, thumbnails: ThumbnailStore(), shortcuts: ShortcutCenter(), actions: AppActions())
             // このストリップのデスクトップに、すべてのウインドウがあることにする
             strip.spaceState.windowIDs = Set(sample.windows.map(\.id))
-            let size = CGSize(width: stage.stripSettings.effectiveWidth, height: 760)
+            let thickness = stage.stripSettings.effectiveThickness
+            let size = edge.isHorizontal
+                ? CGSize(width: width ?? 1280, height: thickness)
+                : CGSize(width: thickness, height: 760)
             let view = StripView(stage: stage, thumbnails: ThumbnailStore(), shortcuts: ShortcutCenter(), strip: strip, actions: AppActions())
                 .frame(width: size.width, height: size.height)
                 .background(Color(white: 0.45))

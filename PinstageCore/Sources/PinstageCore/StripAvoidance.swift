@@ -8,22 +8,34 @@ public enum StripAvoidance {
     /// ストリップに重なっていれば、ステージの範囲に収めた枠（重なっていなければ nil）
     ///
     /// - 画面いっぱいなど、ステージより広いウインドウは、ステージいっぱいにする
-    /// - 重なっているだけのウインドウは、大きさを変えずに右へずらす（収まらなければ縮める）
+    /// - 重なっているだけのウインドウは、大きさを変えずにステージのほうへずらす（収まらなければ縮める）
     /// - Parameters:
-    ///   - frame: ウインドウの枠（ステージと同じ座標）
-    ///   - stage: ステージの範囲（ストリップの右側）
-    public static func adjusted(_ frame: CGRect, stage: CGRect) -> CGRect? {
-        // ステージの左端より左（ストリップのほう）にはみ出していなければ、そのまま
-        guard frame.minX < stage.minX - tolerance, frame.maxX > stage.minX - stage.width else { return nil }
+    ///   - frame: ウインドウの枠（アクセシビリティの座標。左上が原点なので、上の辺は minY）
+    ///   - stage: ステージの範囲（ストリップを除いた残り。frame と同じ座標）
+    ///   - edge: ストリップのある辺
+    public static func adjusted(_ frame: CGRect, stage: CGRect, edge: StripEdge) -> CGRect? {
+        // ステージの、ストリップのある側へはみ出していなければ、そのまま（その先の、隣のディスプレイにあるものも除く）
+        let overlaps: Bool = switch edge {
+        case .left: frame.minX < stage.minX - tolerance && frame.maxX > stage.minX - stage.width
+        case .right: frame.maxX > stage.maxX + tolerance && frame.minX < stage.maxX + stage.width
+        case .top: frame.minY < stage.minY - tolerance && frame.maxY > stage.minY - stage.height
+        case .bottom: frame.maxY > stage.maxY + tolerance && frame.minY < stage.maxY + stage.height
+        }
+        guard overlaps else { return nil }
         let fitted = StageLayout.fit(frame, into: stage)
         return fitted == frame ? nil : fitted
     }
 
-    /// ストリップを狭めてステージの左端が左へ動いたとき、前の左端にくっつけていたウインドウを、新しい左端まで広げた枠（右端はそのまま）。
-    /// くっついていなかったウインドウ・左端が左へ動いていないときは nil（動かさない）
-    public static func following(_ frame: CGRect, stageLeftFrom oldLeft: CGFloat, to newLeft: CGFloat) -> CGRect? {
-        guard newLeft < oldLeft, abs(frame.minX - oldLeft) <= tolerance else { return nil }
-        return CGRect(x: newLeft, y: frame.minY, width: frame.maxX - newLeft, height: frame.height)
+    /// ステージの範囲が広がったとき（ストリップを狭めた・ほかの辺へ移した）、前の端にくっつけていたウインドウを、新しい端まで広げた枠。
+    /// 広がった側の端にくっついていなかったウインドウ・範囲が広がっていないときは nil（動かさない）
+    public static func following(_ frame: CGRect, stageFrom old: CGRect, to new: CGRect) -> CGRect? {
+        var minX = frame.minX, maxX = frame.maxX, minY = frame.minY, maxY = frame.maxY
+        if new.minX < old.minX, abs(frame.minX - old.minX) <= tolerance { minX = new.minX }
+        if new.maxX > old.maxX, abs(frame.maxX - old.maxX) <= tolerance { maxX = new.maxX }
+        if new.minY < old.minY, abs(frame.minY - old.minY) <= tolerance { minY = new.minY }
+        if new.maxY > old.maxY, abs(frame.maxY - old.maxY) <= tolerance { maxY = new.maxY }
+        let widened = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        return widened == frame ? nil : widened
     }
 }
 
@@ -51,19 +63,23 @@ extension StripAvoidance {
     ///   - previous: 前に見たときの枠
     ///   - memory: 覚え書き
     ///   - stage: ステージの範囲
+    ///   - edge: ストリップのある辺
     /// - Returns: 動かす先（動かさなければ nil）と、新しい覚え書き
-    public static func resolve(current: CGRect, previous: CGRect?, memory: ZoomMemory, stage: CGRect) -> (target: CGRect?, memory: ZoomMemory) {
-        guard let fitted = adjusted(current, stage: stage) else {
+    public static func resolve(current: CGRect, previous: CGRect?, memory: ZoomMemory, stage: CGRect, edge: StripEdge) -> (target: CGRect?, memory: ZoomMemory) {
+        guard let fitted = adjusted(current, stage: stage, edge: edge) else {
             // 重なっていない。収めたままなら覚え書きを残し、利用者が動かしていたら消す
             return (nil, current == memory.adjusted ? memory : ZoomMemory())
         }
-        let isWide = current.width >= stage.width - tolerance
-        if isWide, let restore = memory.restore, previous == memory.adjusted, adjusted(restore, stage: stage) == nil {
+        // ストリップのある向きに、ステージいっぱいより広いか（左右のストリップなら幅、上下なら高さ）
+        let isWide = edge.isHorizontal
+            ? current.height >= stage.height - tolerance
+            : current.width >= stage.width - tolerance
+        if isWide, let restore = memory.restore, previous == memory.adjusted, adjusted(restore, stage: stage, edge: edge) == nil {
             // 収めたままの状態から、もう一度広げた → 広げる前の大きさに戻す（ダブルクリックで元に戻す）
             return (restore, ZoomMemory())
         }
         let restore: CGRect? = if isWide {
-            previous.flatMap { adjusted($0, stage: stage) == nil && $0 != memory.adjusted ? $0 : nil } ?? memory.restore
+            previous.flatMap { adjusted($0, stage: stage, edge: edge) == nil && $0 != memory.adjusted ? $0 : nil } ?? memory.restore
         } else {
             nil
         }

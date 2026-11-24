@@ -74,13 +74,17 @@ clean:
 	rm -rf $(DERIVED_DATA) PinstageCore/.build
 
 # 画面の見た目を、見本のデータで画像に描き出す（アプリを起動せずに見た目を確かめる。build/preview に書き出す）。
-# ストリップ（見た目ごと）と、グループの編集画面・型の編集画面・検索・設定の「型」
-PREVIEW_LOOKS := icons grid list thumbnail
+# ストリップ（見た目ごと。左に置いたとき・下に置いたとき・アイコンの並びを 1 列まで狭めたとき）と、グループの編集画面・型の編集画面・検索・設定の「型」
+PREVIEW_LOOKS := grid gridLarge list listLarge thumbnail thumbnailLarge
 PREVIEW_VIEWS := groupEditor layoutEditor search layouts
 preview: build
 	mkdir -p build/preview
 	@for look in $(PREVIEW_LOOKS); do \
 		"$(APP)/Contents/MacOS/Pinstage" --render-strip-preview "build/preview/strip-$$look.png" $$look 230 >/dev/null 2>&1; \
+		"$(APP)/Contents/MacOS/Pinstage" --render-strip-preview "build/preview/strip-bottom-$$look.png" $$look 1280 normal bottom >/dev/null 2>&1; \
+	done
+	@for look in grid gridLarge; do \
+		"$(APP)/Contents/MacOS/Pinstage" --render-strip-preview "build/preview/strip-$$look-1column.png" $$look 52 >/dev/null 2>&1; \
 	done
 	@for view in $(PREVIEW_VIEWS); do \
 		"$(APP)/Contents/MacOS/Pinstage" --render-view-preview "build/preview/view-$$view.png" $$view >/dev/null 2>&1; \

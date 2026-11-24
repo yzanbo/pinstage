@@ -80,6 +80,19 @@ struct ListReorderTests {
         #expect(ListReorder.dropIndex(forY: 200, frames: frames, count: 3) == 3)
     }
 
+    @Test("横に並べたときは、ポインタの x から、落とす位置を決める（真ん中より左なら、その前）")
+    func horizontalDropIndex() {
+        let columns: [Int: CGRect] = [
+            0: CGRect(x: 0, y: 0, width: 120, height: 34),
+            1: CGRect(x: 124, y: 0, width: 120, height: 34),
+            2: CGRect(x: 248, y: 0, width: 120, height: 34),
+        ]
+        #expect(ListReorder.dropIndex(forX: -10, frames: columns, count: 3) == 0)
+        #expect(ListReorder.dropIndex(forX: 100, frames: columns, count: 3) == 1)
+        #expect(ListReorder.dropIndex(forX: 190, frames: columns, count: 3) == 2)
+        #expect(ListReorder.dropIndex(forX: 900, frames: columns, count: 3) == 3)
+    }
+
     @Test("後ろへ移すときも前へ移すときも、落とした位置に入る")
     func moved() {
         #expect(ListReorder.moved(["a", "b", "c", "d"], from: 0, dropIndex: 3) == ["b", "c", "a", "d"])
@@ -114,22 +127,59 @@ struct StripRowSizingTests {
         #expect(StripRowSizing.rowHeight(available: 100, count: 40, spacing: 6, footer: 24, maximum: 88) == 0)
     }
 
-    @Test("サムネイルを出しているときは、上限を大きくする")
-    func maximum() {
-        #expect(StripRowSizing.maximumRowHeight(size: .thumbnail) > StripRowSizing.maximumRowHeight(size: .list))
-    }
-
     @Test("一覧の行は、ウインドウの数にかかわらず決まった高さ（ブラウザの縦のタブと同じくらい）")
     func listRows() {
-        let few = StripRowSizing.rowHeight(size: .list, available: 700, count: 2, footer: 0)
-        let many = StripRowSizing.rowHeight(size: .list, available: 700, count: 40, footer: 0)
-        #expect(few == StripRowSizing.listRowHeight)
-        #expect(many == StripRowSizing.listRowHeight)
+        let few = StripRowSizing.rowHeight(kind: .list(.small), available: 700, count: 2, footer: 0)
+        let many = StripRowSizing.rowHeight(kind: .list(.small), available: 700, count: 40, footer: 0)
+        #expect(few == 34)
+        #expect(many == 34)
         // サムネイルは、少ないほど大きく広げる
-        let thumbnail = StripRowSizing.rowHeight(size: .thumbnail, available: 700, count: 2, footer: 0)
-        #expect(thumbnail > StripRowSizing.listRowHeight)
+        let thumbnail = StripRowSizing.rowHeight(kind: .thumbnail(.small), available: 700, count: 2, footer: 0)
+        #expect(thumbnail > 34)
         // 一覧は、行の間も詰める
-        #expect(StripRowSizing.spacing(size: .list) < StripRowSizing.spacing(size: .thumbnail))
+        #expect(StripRowSizing.spacing(kind: .list(.small)) < StripRowSizing.spacing(kind: .thumbnail(.small)))
+    }
+
+    @Test("アイコンの並びは、アイコンの大きさで決まった高さ。小さなアイコンは、一覧と同じ大きさで、間も詰める")
+    func tileRows() {
+        for size in StripIconSize.allCases {
+            let kind = StripRowKind.tile(size)
+            #expect(StripRowSizing.rowHeight(kind: kind, available: 700, count: 2, footer: 0) == size.tileHeight)
+            #expect(kind.iconSize == size.iconSize)
+            #expect(kind.showsIconOnly)
+            // タイルにアイコンが収まる
+            #expect(size.tileHeight > size.iconSize && size.tileWidth > size.iconSize)
+        }
+        #expect(StripRowKind.tile(.small).iconSize == StripRowKind.list(.small).iconSize)
+        #expect(StripIconSize.large.iconSize == 36)
+        #expect(StripRowSizing.spacing(kind: .tile(.small)) < StripRowSizing.spacing(kind: .tile(.large)))
+        #expect(!StripRowKind.list(.small).showsIconOnly)
+    }
+
+    @Test("大きさは、一覧・サムネイルにもかかる（「小」は、いままでの大きさ。大きいほど大きい）")
+    func sizeAppliesToEveryFormat() {
+        // 「小」は、いままでの一覧（ブラウザの縦のタブ）とサムネイルの大きさ
+        #expect(StripIconSize.small.listRowHeight == 34)
+        #expect(StripIconSize.small.listIconSize == 18)
+        #expect(StripIconSize.small.thumbnailHeight == 84)
+        let sizes = StripIconSize.allCases
+        for (smaller, larger) in zip(sizes, sizes.dropFirst()) {
+            #expect(smaller.listRowHeight < larger.listRowHeight)
+            #expect(smaller.listIconSize < larger.listIconSize)
+            #expect(smaller.listFontSize < larger.listFontSize)
+            #expect(smaller.thumbnailHeight < larger.thumbnailHeight)
+            #expect(smaller.thumbnailBadgeSize < larger.thumbnailBadgeSize)
+            #expect(StripRowSizing.barThickness(kind: .list(smaller)) < StripRowSizing.barThickness(kind: .list(larger)))
+            #expect(StripRowSizing.barThickness(kind: .thumbnail(smaller)) < StripRowSizing.barThickness(kind: .thumbnail(larger)))
+        }
+        for size in sizes {
+            // 一覧の行は、大きさで決まった高さ。アイコンが収まる
+            #expect(StripRowSizing.rowHeight(kind: .list(size), available: 700, count: 2, footer: 0) == size.listRowHeight)
+            #expect(size.listIconSize < size.listRowHeight)
+        }
+        // 横長の帯でも、「小」はいままでの大きさ
+        #expect(StripRowSizing.barRowHeight(kind: .thumbnail(.small)) == 116)
+        #expect(StripRowSizing.barItemWidth(kind: .thumbnail(.small), available: 1000, count: 3, trailing: 0) == 150)
     }
 }
 
@@ -166,10 +216,40 @@ struct StripLookTests {
         var settings = StripSettings.default
         settings.itemSize = .thumbnail
         #expect(settings.capturesThumbnails)
-        for size in [StripItemSize.icons, .grid, .list] {
+        for size in [StripItemSize.grid, .list] {
             settings.itemSize = size
             #expect(!settings.capturesThumbnails)
         }
+    }
+
+    @Test("行の描き方は、形式と大きさで決まる")
+    func rowKind() {
+        var settings = StripSettings.default
+        settings.itemSize = .thumbnail
+        #expect(settings.rowKind == .thumbnail(.small))
+        settings.itemSize = .list
+        #expect(settings.rowKind == .list(.small))
+        settings.iconSize = .large
+        #expect(settings.rowKind == .list(.large))
+        settings.itemSize = .grid
+        #expect(settings.rowKind == .tile(.large))
+        settings.iconSize = .small
+        #expect(settings.rowKind == .tile(.small))
+    }
+
+    @Test("大きさは保存して読み戻せる（初期設定は小。アイコンの並びだけにかけていたときの値も読む）")
+    func iconSizePersistence() throws {
+        let suite = "PinstageTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("large", forKey: "strip.gridIconSize")
+        #expect(StripSettings(defaults: defaults).iconSize == .large)
+        defaults.removePersistentDomain(forName: suite)
+        var settings = StripSettings(defaults: defaults)
+        #expect(settings.iconSize == .small)
+        settings.iconSize = .medium
+        settings.save(to: defaults)
+        #expect(StripSettings(defaults: defaults).iconSize == .medium)
     }
 
     @Test("見た目を 4 つにまとめる前の値は、まとめた先に読み替える")
@@ -179,6 +259,8 @@ struct StripLookTests {
         #expect(StripItemSize(storedValue: "thumbnailMedium") == .thumbnail)
         #expect(StripItemSize(storedValue: "thumbnailLarge") == .thumbnail)
         #expect(StripItemSize(storedValue: "grid") == .grid)
+        // 前の「細い帯」は、アイコンの並び
+        #expect(StripItemSize(storedValue: "icons") == .grid)
         #expect(StripItemSize(storedValue: "unknown") == nil)
         let suite = "PinstageTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -187,14 +269,58 @@ struct StripLookTests {
         #expect(StripSettings(defaults: defaults).itemSize == .thumbnail)
     }
 
-    @Test("アイコンの並びは、ストリップの幅をそのまま使う")
+    @Test("アイコンの並びの幅は、一覧・サムネイルの幅とは別に覚える")
     func gridWidth() {
         var settings = StripSettings.default
         settings.stripWidth = 300
         settings.itemSize = .grid
-        #expect(settings.effectiveWidth == 300)
-        #expect(settings.itemSize.showsTiles)
-        #expect(!settings.itemSize.isIconOnly)
+        // 何も変えていなければ、初期設定の幅
+        #expect(settings.effectiveThickness == StripGeometry.defaultWidth)
+        settings.width = 90
+        #expect(settings.effectiveThickness == 90)
+        #expect(settings.rowKind.showsIconOnly)
+        // 一覧に戻すと、一覧の幅に戻る。アイコンの並びにすると、狭めた幅に戻る
+        settings.itemSize = .list
+        #expect(settings.effectiveThickness == 300)
+        settings.width = 200
+        #expect(settings.stripWidth == 200)
+        settings.itemSize = .grid
+        #expect(settings.effectiveThickness == 90)
+    }
+
+    @Test("アイコンの並びは、1 列になる幅まで狭められる（一覧・サムネイルは、ふつうの下限まで）")
+    func oneColumn() throws {
+        var settings = StripSettings.default
+        settings.itemSize = .grid
+        for size in StripIconSize.allCases {
+            settings.iconSize = size
+            settings.width = 10
+            #expect(settings.width == size.minimumStripWidth)
+            #expect(settings.widthRange.lowerBound == size.minimumStripWidth)
+            // 1 列のタイルと、両側の余白が収まる
+            #expect(size.minimumStripWidth >= size.tileWidth + 12)
+            // 細い帯の形で描く
+            #expect(StripGeometry.usesCompactChrome(width: settings.width))
+        }
+        // 小さなアイコンで狭めたあと、大きくしたら、その大きさの 1 列の幅まで広げる
+        settings.iconSize = .small
+        settings.width = 10
+        settings.iconSize = .large
+        #expect(settings.width == StripIconSize.large.minimumStripWidth)
+        // 一覧は、ふつうの下限まで
+        settings.itemSize = .list
+        settings.width = 10
+        #expect(settings.width == StripGeometry.widthRange.lowerBound)
+        #expect(!StripGeometry.usesCompactChrome(width: settings.width))
+        // 狭めた幅は、保存して読み戻せる
+        let suite = "PinstageTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        settings.itemSize = .grid
+        settings.iconSize = .small
+        settings.width = 52
+        settings.save(to: defaults)
+        #expect(StripSettings(defaults: defaults).width == 52)
     }
 }
 

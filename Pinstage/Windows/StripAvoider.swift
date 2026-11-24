@@ -6,7 +6,7 @@ import PinstageCore
 ///
 /// macOS には、ほかのアプリに使わせない場所を予約する仕組み（Dock のようなもの）がないので、ストリップは浮いているだけで、
 /// ウインドウを広げる（タイトルバーのダブルクリック・緑のボタン・「フィル」など）と、ストリップの後ろまで入り込む。
-/// ウインドウが動いた・大きさが変わった知らせを受け取り、ストリップに重なっていたら、ステージの範囲（ストリップの右側）に戻す。
+/// ウインドウが動いた・大きさが変わった知らせを受け取り、ストリップに重なっていたら、ステージの範囲（ストリップを除いた残り）に戻す。
 /// - ドラッグ・大きさの変更の途中は動かさず、マウスを離してから戻す
 /// - 広げたウインドウはステージいっぱいに収め、もう一度ダブルクリックしたら元の大きさに戻す
 /// - 知らせを出さないアプリのため、ウインドウを読み直すたび（1.5 秒ごと）にも確かめる
@@ -143,7 +143,8 @@ final class StripAvoider {
                 current: frame,
                 previous: knownFrames[item.id],
                 memory: memories[item.id] ?? .init(),
-                stage: area
+                stage: area,
+                edge: settings.edge
             )
             memories[item.id] = result.memory
             guard let target = result.target else { continue }

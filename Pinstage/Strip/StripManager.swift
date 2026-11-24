@@ -30,6 +30,8 @@ final class StripManager {
     private var overlappingSince: [String: TimeInterval] = [:]
     /// 画面に出ているストリップと、表に出ているデスクトップのストリップが食い違い始めた時刻（ディスプレイごと）
     private var disagreeingSince: [String: TimeInterval] = [:]
+    /// ディスプレイごとの、前に見たときの使える範囲（Dock・メニューバーを除いた範囲）
+    private var knownVisibleFrames: [String: CGRect] = [:]
     /// 非公開の API で、デスクトップを直接見分けるか（起動したときに決める）
     private let usesSystemSpaces = SkyLight.isAvailable
 
@@ -133,6 +135,7 @@ final class StripManager {
 
     /// ウインドウを読み直した。ストリップを確かめてから、読んだ「画面に出ているウインドウの一覧」を覚えさせる
     private func windowsRefreshed() {
+        followUsableAreaChanges()
         if usesSystemSpaces {
             syncSpaces()
             assignWindowsBySpace()
@@ -142,6 +145,19 @@ final class StripManager {
         var switching = ensureStrips(onScreen: snapshot?.ownWindowNumbers ?? CurrentSpace.ownWindowNumbersOnScreen())
         if let snapshot, rememberDesktops(from: snapshot) { switching = true }
         isSwitching = switching
+    }
+
+    /// Dock の大きさ・位置・自動で隠すか、メニューバーを自動で隠すかを変えると、ディスプレイの使える範囲（visibleFrame）が変わる。
+    /// 画面の構成が変わった知らせが来ないこともあるので、読み直すたびに比べ、変わっていたらストリップを置き直し、ステージを並べ直す
+    /// （常に表示の Dock と同じ辺に置いたストリップが、Dock の下に潜らないように）
+    private func followUsableAreaChanges() {
+        let current = Dictionary(NSScreen.screens.map { (StageController.displayKey($0), $0.visibleFrame) }, uniquingKeysWith: { first, _ in first })
+        defer { knownVisibleFrames = current }
+        // ディスプレイをつなぎ直したときは、知らせを受けて作り直すので、ここでは使える範囲だけが変わったときに限る
+        guard !knownVisibleFrames.isEmpty, Set(current.keys) == Set(knownVisibleFrames.keys), current != knownVisibleFrames else { return }
+        DesktopTrace.log("使える範囲", "変わった（Dock・メニューバーの設定）: \(current.values.map { "\($0)" }.joined(separator: " / "))")
+        strips.forEach { $0.relayout() }
+        stage.reapplyAllStages()
     }
 
     /// 読んだ一覧を、同じ一覧の中に出ているストリップのデスクトップのものとして覚えさせる。
@@ -323,15 +339,16 @@ final class StripManager {
         }
         if new.displays != old.displays {
             rebuild()
-        } else if new.mode != old.mode {
+        } else if new.mode != old.mode || new.edge != old.edge {
             strips.forEach { $0.applySettings() }
-        } else if new.effectiveWidth != old.effectiveWidth {
+        } else if new.effectiveThickness != old.effectiveThickness {
             strips.forEach { $0.relayout() }
         }
-        // ステージの範囲が変わったので、並べているウインドウを並べ直す（常に出すときだけ、ストリップの幅でステージが変わる）
-        if new.mode != old.mode || (new.mode == .alwaysShown && new.effectiveWidth != old.effectiveWidth) {
-            // 狭めたときは、ストリップの横にくっつけていたウインドウも、新しい幅まで広げる
-            stage.followNarrowedStrip(from: old)
+        // ステージの範囲が変わったので、並べているウインドウを並べ直す（常に出すときだけ、ストリップの厚みと辺でステージが変わる）
+        let placementChanged = new.effectiveThickness != old.effectiveThickness || new.edge != old.edge
+        if new.mode != old.mode || (new.mode == .alwaysShown && placementChanged) {
+            // ステージが広がった側では、ストリップの横にくっつけていたウインドウも、新しい端まで広げる
+            stage.followWidenedStage(from: old)
             stage.reapplyAllStages()
             // ストリップの後ろに入り込ませない範囲も変わったので、すぐ読み直して、後ろに残ったウインドウを押し出す
             // （読み直すと StripAvoider が確かめる。待つと、次の読み直しまで最大 1.5 秒かかる）

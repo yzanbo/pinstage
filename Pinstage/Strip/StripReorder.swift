@@ -15,13 +15,23 @@ final class ReorderState {
     var dropIndex: Int?
 }
 
+/// 一覧の並べ方（落とす位置の決め方と、落とす位置に引く線の向きが変わる）
+enum ReorderLayout {
+    /// 縦に並べた行（左右のストリップの一覧）
+    case rows
+    /// 横に並べたもの（上下のストリップ）
+    case columns
+    /// 格子に並べたアイコン（左右のストリップの「アイコンの並び」）
+    case grid
+}
+
 /// 行をドラッグして、一覧の中なら並べ替え、ストリップの外なら onDropOutside。動かさずに離したらクリック
 struct ReorderDrag: ViewModifier {
     let index: Int
     let count: Int
     let space: String
-    /// アイコンを格子に並べているか（落とす位置を、縦横の位置で決める）
-    var isGrid = false
+    /// 一覧の並べ方（落とす位置を、縦に並べた行なら高さ、横に並べたものなら x、格子なら縦横の位置で決める）
+    var layout: ReorderLayout = .rows
     let reorder: ReorderState
     let strip: StripController
     let onTap: () -> Void
@@ -59,9 +69,11 @@ struct ReorderDrag: ViewModifier {
                             // グループの上では、並べ替えの線を出さない
                             reorder.dropIndex = nil
                         } else if strip.frame.contains(NSEvent.mouseLocation) {
-                            let drop = isGrid
-                                ? ListReorder.gridDropIndex(for: value.location, frames: reorder.frames, count: count)
-                                : ListReorder.dropIndex(forY: value.location.y, frames: reorder.frames, count: count)
+                            let drop = switch layout {
+                            case .rows: ListReorder.dropIndex(forY: value.location.y, frames: reorder.frames, count: count)
+                            case .columns: ListReorder.dropIndex(forX: value.location.x, frames: reorder.frames, count: count)
+                            case .grid: ListReorder.gridDropIndex(for: value.location, frames: reorder.frames, count: count)
+                            }
                             reorder.dropIndex = ListReorder.isNoOp(from: index, dropIndex: drop) ? nil : drop
                         } else {
                             reorder.dropIndex = nil
@@ -89,11 +101,13 @@ struct ReorderDrag: ViewModifier {
     }
 }
 
-/// 落とす位置に引く線（一覧では行の間に横の線、アイコンの並びではアイコンの左に縦の線）
+/// 落とす位置に引く線（縦に並べた行では行の間に横の線、横に並べたもの・格子ではその左に縦の線）
 struct DropLine: View {
     let reorder: ReorderState
     let count: Int
-    var isGrid = false
+    var layout: ReorderLayout = .rows
+
+    private var isGrid: Bool { layout != .rows }
 
     var body: some View {
         if let drop = reorder.dropIndex {

@@ -80,55 +80,189 @@ struct StripTests {
 
     @Test("常に出すときは、ストリップの右側だけをステージにする")
     func stageAlwaysShown() {
-        let stage = StripGeometry.stageFrame(in: visible, mode: .alwaysShown)
-        let strip = StripGeometry.shownFrame(in: visible)
+        let stage = StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .left, thickness: 230)
+        let strip = StripGeometry.shownFrame(in: visible, edge: .left, thickness: 230)
         #expect(stage.minX == strip.maxX + StripGeometry.margin)
         #expect(stage.maxX == visible.maxX)
     }
 
     @Test("ストリップは、ステージと同じく上下いっぱいを使う")
     func fullHeight() {
-        let strip = StripGeometry.shownFrame(in: visible)
-        let stage = StripGeometry.stageFrame(in: visible, mode: .alwaysShown)
+        let strip = StripGeometry.shownFrame(in: visible, edge: .left, thickness: 230)
+        let stage = StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .left, thickness: 230)
         #expect(strip.minY == visible.minY)
         #expect(strip.maxY == visible.maxY)
         #expect(strip.minY == stage.minY && strip.maxY == stage.maxY)
     }
 
-    @Test("自動で隠すときは、画面いっぱいをステージにする")
-    func stageAutoHide() {
-        #expect(StripGeometry.stageFrame(in: visible, mode: .autoHide) == visible)
+    @Test("自動で隠すときは、どの辺でも、画面いっぱいをステージにする", arguments: StripEdge.allCases)
+    func stageAutoHide(edge: StripEdge) {
+        #expect(StripGeometry.stageFrame(in: visible, mode: .autoHide, edge: edge, thickness: 230) == visible)
     }
 
     @Test("左端にポインタが来たら出し、離れたら隠す")
     func revealAndHide() {
-        #expect(StripGeometry.shouldReveal(pointer: CGPoint(x: 1, y: 500), screenFrame: visible))
-        #expect(!StripGeometry.shouldReveal(pointer: CGPoint(x: 50, y: 500), screenFrame: visible))
+        #expect(StripGeometry.shouldReveal(pointer: CGPoint(x: 1, y: 500), screenFrame: visible, edge: .left))
+        #expect(!StripGeometry.shouldReveal(pointer: CGPoint(x: 50, y: 500), screenFrame: visible, edge: .left))
         // 左隣のディスプレイの上では出さない
         let right = CGRect(x: 1600, y: 0, width: 1600, height: 1000)
-        #expect(!StripGeometry.shouldReveal(pointer: CGPoint(x: 800, y: 500), screenFrame: right))
-        #expect(StripGeometry.shouldReveal(pointer: CGPoint(x: 1601, y: 500), screenFrame: right))
-        let strip = StripGeometry.shownFrame(in: visible)
-        #expect(!StripGeometry.shouldHide(pointer: CGPoint(x: strip.maxX + 10, y: 500), stripFrame: strip))
-        #expect(StripGeometry.shouldHide(pointer: CGPoint(x: strip.maxX + 100, y: 500), stripFrame: strip))
+        #expect(!StripGeometry.shouldReveal(pointer: CGPoint(x: 800, y: 500), screenFrame: right, edge: .left))
+        #expect(StripGeometry.shouldReveal(pointer: CGPoint(x: 1601, y: 500), screenFrame: right, edge: .left))
+        let strip = StripGeometry.shownFrame(in: visible, edge: .left, thickness: 230)
+        #expect(!StripGeometry.shouldHide(pointer: CGPoint(x: strip.maxX + 10, y: 500), stripFrame: strip, screenFrame: visible, edge: .left))
+        #expect(StripGeometry.shouldHide(pointer: CGPoint(x: strip.maxX + 100, y: 500), stripFrame: strip, screenFrame: visible, edge: .left))
     }
 
     @Test("幅を変えると、ストリップとステージの境目も動く")
     func width() {
-        let strip = StripGeometry.shownFrame(in: visible, width: 320)
-        let stage = StripGeometry.stageFrame(in: visible, mode: .alwaysShown, width: 320)
+        let strip = StripGeometry.shownFrame(in: visible, edge: .left, thickness: 320)
+        let stage = StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .left, thickness: 320)
         #expect(strip.width == 320)
         #expect(stage.minX == strip.maxX + StripGeometry.margin)
-        #expect(StripGeometry.hiddenFrame(in: visible, width: 320).maxX < visible.minX)
+        #expect(StripGeometry.hiddenFrame(in: visible, edge: .left, thickness: 320).maxX < visible.minX)
     }
 
     @Test("ドラッグの幅は範囲の中に収め、画面の半分より広くしない")
     func dragWidth() {
-        #expect(StripGeometry.width(forPointerX: 300, in: visible) == 300 - StripGeometry.margin)
-        #expect(StripGeometry.width(forPointerX: 20, in: visible) == StripGeometry.widthRange.lowerBound)
-        #expect(StripGeometry.width(forPointerX: 2000, in: visible) == StripGeometry.widthRange.upperBound)
+        #expect(StripGeometry.width(forPointerX: 300, in: visible, edge: .left) == 300 - StripGeometry.margin)
+        #expect(StripGeometry.width(forPointerX: 20, in: visible, edge: .left) == StripGeometry.widthRange.lowerBound)
+        #expect(StripGeometry.width(forPointerX: 2000, in: visible, edge: .left) == StripGeometry.widthRange.upperBound)
         let narrow = CGRect(x: 0, y: 0, width: 600, height: 800)
-        #expect(StripGeometry.width(forPointerX: 500, in: narrow) == 300)
+        #expect(StripGeometry.width(forPointerX: 500, in: narrow, edge: .left) == 300)
+        // 右のストリップは、右端からの距離で決める（左へドラッグすると広がる）
+        #expect(StripGeometry.width(forPointerX: 1300, in: visible, edge: .right) == 300 - StripGeometry.margin)
+        #expect(StripGeometry.width(forPointerX: 1590, in: visible, edge: .right) == StripGeometry.widthRange.lowerBound)
+    }
+
+    @Test("どの辺でも、ストリップとステージは重ならず、合わせて使える範囲に収まる", arguments: StripEdge.allCases)
+    func edges(edge: StripEdge) {
+        // メニューバー（上 25pt）と Dock（下 70pt）を除いた範囲
+        let visible = CGRect(x: 0, y: 70, width: 1600, height: 905)
+        let strip = StripGeometry.shownFrame(in: visible, edge: edge, thickness: 200)
+        let stage = StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: edge, thickness: 200)
+        #expect(visible.contains(strip))
+        #expect(visible.contains(stage))
+        #expect(!strip.intersects(stage))
+        // 厚みは、左右なら幅、上下なら高さ。長さは、使える範囲いっぱい
+        #expect((edge.isHorizontal ? strip.height : strip.width) == 200)
+        #expect((edge.isHorizontal ? strip.width : strip.height) == (edge.isHorizontal ? visible.width : visible.height))
+        // ステージは、ストリップと両側の間の分だけ狭くなる
+        let used = 200 + StripGeometry.margin * 2
+        #expect(stage.width == visible.width - (edge.isHorizontal ? 0 : used))
+        #expect(stage.height == visible.height - (edge.isHorizontal ? used : 0))
+        // 隠すときは、使える範囲の外へ出す
+        #expect(!StripGeometry.hiddenFrame(in: visible, edge: edge, thickness: 200).intersects(visible))
+    }
+
+    @Test("ストリップは、その辺に寄せて置く")
+    func edgePlacement() {
+        let visible = CGRect(x: 0, y: 70, width: 1600, height: 905)
+        #expect(StripGeometry.shownFrame(in: visible, edge: .right, thickness: 200).maxX == visible.maxX - StripGeometry.margin)
+        #expect(StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .right, thickness: 200).minX == visible.minX)
+        // 画面座標は左下が原点。上の辺は maxY（メニューバーのすぐ下）、下の辺は minY（Dock のすぐ上）
+        #expect(StripGeometry.shownFrame(in: visible, edge: .top, thickness: 48).maxY == visible.maxY - StripGeometry.margin)
+        #expect(StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .top, thickness: 48).minY == visible.minY)
+        #expect(StripGeometry.shownFrame(in: visible, edge: .bottom, thickness: 48).minY == visible.minY + StripGeometry.margin)
+        #expect(StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .bottom, thickness: 48).maxY == visible.maxY)
+    }
+
+    @Test("ストリップのある端に寄せたときだけ出す")
+    func revealOnEachEdge() {
+        let screen = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        let points: [StripEdge: CGPoint] = [
+            .left: CGPoint(x: 0, y: 500), .right: CGPoint(x: 1599, y: 500),
+            .top: CGPoint(x: 800, y: 1000), .bottom: CGPoint(x: 800, y: 1),
+        ]
+        for edge in StripEdge.allCases {
+            for (at, point) in points {
+                #expect(StripGeometry.shouldReveal(pointer: point, screenFrame: screen, edge: edge) == (at == edge))
+            }
+        }
+        // 右隣・上隣のディスプレイの上では出さない
+        #expect(!StripGeometry.shouldReveal(pointer: CGPoint(x: 1601, y: 500), screenFrame: screen, edge: .right))
+        #expect(!StripGeometry.shouldReveal(pointer: CGPoint(x: 800, y: 1001), screenFrame: screen, edge: .top))
+    }
+
+    @Test("ストリップと画面の端との間（Dock・メニューバーのあるところ）にポインタがある間は、隠さない")
+    func keepsShownOverSystemBar() {
+        let screen = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        // 下に Dock（70pt）、上にメニューバー（25pt）が常に出ている
+        let visible = CGRect(x: 0, y: 70, width: 1600, height: 905)
+        let bottom = StripGeometry.shownFrame(in: visible, edge: .bottom, thickness: 48)
+        // 下の端に寄せて出した直後（ポインタは Dock の上。ストリップからは 24pt より離れている）
+        #expect(!StripGeometry.shouldHide(pointer: CGPoint(x: 800, y: 1), stripFrame: bottom, screenFrame: screen, edge: .bottom))
+        #expect(StripGeometry.shouldHide(pointer: CGPoint(x: 800, y: bottom.maxY + 100), stripFrame: bottom, screenFrame: screen, edge: .bottom))
+        let top = StripGeometry.shownFrame(in: visible, edge: .top, thickness: 48)
+        #expect(!StripGeometry.shouldHide(pointer: CGPoint(x: 800, y: 1000), stripFrame: top, screenFrame: screen, edge: .top))
+        #expect(StripGeometry.shouldHide(pointer: CGPoint(x: 800, y: top.minY - 100), stripFrame: top, screenFrame: screen, edge: .top))
+        // ほかの辺の端までは伸ばさない
+        #expect(StripGeometry.shouldHide(pointer: CGPoint(x: 800, y: 1), stripFrame: top, screenFrame: screen, edge: .top))
+    }
+
+    @Test("上下に出したときの厚みは、行の描き方で決まる（幅の設定は使わない）")
+    func barThickness() {
+        var settings = StripSettings(mode: .alwaysShown, itemSize: .list, visibleCount: 8, displays: .all, stripWidth: 300)
+        #expect(settings.effectiveThickness == 300)
+        settings.edge = .bottom
+        #expect(settings.effectiveThickness == StripRowSizing.barThickness(kind: .list(.small)))
+        settings.itemSize = .thumbnail
+        #expect(settings.effectiveThickness == StripRowSizing.barThickness(kind: .thumbnail(.small)))
+        // アイコンの並びも、大きさで決まる（小さいほど低い）
+        settings.itemSize = .grid
+        settings.iconSize = .small
+        let small = settings.effectiveThickness
+        settings.iconSize = .large
+        #expect(small < settings.effectiveThickness)
+        #expect(settings.effectiveThickness == StripRowSizing.barThickness(kind: .tile(.large)))
+        settings.itemSize = .list
+        settings.edge = .right
+        #expect(settings.effectiveThickness == 300)
+    }
+
+    @Test("横長の帯の一覧は、使える幅をタブで分ける（範囲の中で）")
+    func barItemWidth() {
+        let range = StripRowSizing.tabWidthRange(for: .small)
+        // 少ないときは上限の幅
+        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 2, trailing: 0) == range.upperBound)
+        // 多いときは同じ幅で分ける（間の 4pt を除く）
+        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 6, trailing: 0) == 163)
+        // 収まらないほど多いときは下限の幅（スクロールする）
+        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 20, trailing: 0) == range.lowerBound)
+        // 後ろに並べるものの分を除く
+        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 6, trailing: 40) == 156)
+        // 大きいほど、タブも広い
+        #expect(StripRowSizing.barItemWidth(kind: .list(.large), available: 1000, count: 20, trailing: 0) > range.lowerBound)
+        // アイコン・サムネイルは決まった幅
+        #expect(StripRowSizing.barItemWidth(kind: .thumbnail(.small), available: 1000, count: 20, trailing: 0) == 150)
+    }
+
+    @Test("位置は保存して読み戻せる（初期設定は左）")
+    func edgePersistence() throws {
+        let suite = "PinstageTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var settings = StripSettings(defaults: defaults)
+        #expect(settings.edge == .left)
+        settings.edge = .bottom
+        settings.save(to: defaults)
+        #expect(StripSettings(defaults: defaults).edge == .bottom)
+    }
+
+    @Test("同じ辺に、自動で隠れる Dock・メニューバーがあるときだけ、重なると知らせる")
+    func edgeConflict() {
+        #expect(StripEdgeConflict.dockEdge(orientation: "left") == .left)
+        #expect(StripEdgeConflict.dockEdge(orientation: "right") == .right)
+        #expect(StripEdgeConflict.dockEdge(orientation: "bottom") == .bottom)
+        #expect(StripEdgeConflict.dockEdge(orientation: nil) == .bottom)
+        // 自動で隠れる Dock と同じ辺
+        #expect(StripEdgeConflict.conflict(edge: .bottom, dockEdge: .bottom, dockAutoHides: true, menuBarAutoHides: false) == .autoHidingDock)
+        // 常に出ている Dock は、使える範囲から除かれているので重ならない
+        #expect(StripEdgeConflict.conflict(edge: .bottom, dockEdge: .bottom, dockAutoHides: false, menuBarAutoHides: false) == nil)
+        // ほかの辺の Dock は関係ない
+        #expect(StripEdgeConflict.conflict(edge: .left, dockEdge: .bottom, dockAutoHides: true, menuBarAutoHides: true) == nil)
+        // 上の辺は、メニューバーが自動で隠れるとき
+        #expect(StripEdgeConflict.conflict(edge: .top, dockEdge: .bottom, dockAutoHides: true, menuBarAutoHides: true) == .autoHidingMenuBar)
+        #expect(StripEdgeConflict.conflict(edge: .top, dockEdge: .bottom, dockAutoHides: true, menuBarAutoHides: false) == nil)
     }
 
     @Test("幅は保存して読み戻せる")
@@ -145,15 +279,13 @@ struct StripTests {
         #expect(StripSettings(defaults: defaults).stripWidth == 300)
     }
 
-    @Test("アイコンだけのときは細い幅に決め、変えた幅は覚えておく")
-    func iconOnlyWidth() {
+    @Test("アイコンの並びをドラッグで狭めるときは、1 列になる幅まで")
+    func dragGridWidth() {
         var settings = StripSettings.default
-        settings.stripWidth = 320
-        settings.itemSize = .icons
-        #expect(settings.effectiveWidth == StripGeometry.iconOnlyWidth)
-        #expect(settings.itemSize.thumbnailHeight == 0)
-        settings.itemSize = .list
-        #expect(settings.effectiveWidth == 320)
+        settings.itemSize = .grid
+        settings.iconSize = .small
+        #expect(StripGeometry.width(forPointerX: 20, in: visible, edge: .left, range: settings.widthRange) == StripIconSize.small.minimumStripWidth)
+        #expect(StripGeometry.width(forPointerX: 108, in: visible, edge: .left, range: settings.widthRange) == 100)
     }
 
     @Test("並べる数は範囲の中に収める")

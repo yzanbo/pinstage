@@ -8,12 +8,15 @@ import SwiftUI
 final class StripSpaceState {
     /// そのデスクトップで画面に出ていたウインドウ（作ったばかりで、まだ分からないときは空）
     var windowIDs: Set<AXUIElement> = []
+    /// 幅を変えるドラッグの途中の幅（ドラッグしていなければ nil）。途中でも、その幅に合う形で描く
+    var resizingWidth: CGFloat?
 }
 
-/// 1 つのディスプレイの、1 つのデスクトップのストリップ（画面の左端の、ウインドウとグループの一覧）を出す・隠す
+/// 1 つのディスプレイの、1 つのデスクトップのストリップ（画面の端の、ウインドウとグループの一覧）を出す・隠す
 ///
-/// - 常に出す: いつも出しておく（ステージはストリップの右側だけを使う）
-/// - 自動で隠す: ポインタをそのディスプレイの左端に寄せたら出し、離れたら隠す
+/// 出す辺（上下左右）は設定で選ぶ。左右は縦長の帯、上下は横長の帯。
+/// - 常に出す: いつも出しておく（ステージは、ストリップを除いた残りを使う）
+/// - 自動で隠す: ポインタをそのディスプレイの、ストリップのある端に寄せたら出し、離れたら隠す
 final class StripController {
     /// ストリップを出すディスプレイ
     let screen: NSScreen
@@ -68,6 +71,41 @@ final class StripController {
         if desktop != self.desktop { self.desktop = desktop }
         if spaceState.windowIDs != desktop.windows { spaceState.windowIDs = desktop.windows }
     }
+
+    /// いま、細い帯の形（上の帯・並べ方のボタンを、アイコンだけにして縦に並べる）で出しているか。
+    /// 左右のストリップで、アイコンの並びを狭めたとき（幅を変えるドラッグの途中も、その幅で決める）
+    var isCompact: Bool {
+        !isHorizontal && StripGeometry.usesCompactChrome(width: spaceState.resizingWidth ?? stage.stripSettings.effectiveThickness)
+    }
+
+    /// ウインドウの行の描き方（形式と、アイコンの大きさから決まる）
+    var rowKind: StripRowKind {
+        stage.stripSettings.rowKind
+    }
+
+    /// いまのディスプレイ（作ったときの NSScreen の値が古くならないよう、つないでいるディスプレイから同じものを探し直す）。
+    /// Dock・メニューバーの設定を変えると、使える範囲（visibleFrame）が変わるため
+    private var currentScreen: NSScreen {
+        NSScreen.screens.first { StageController.displayKey($0) == displayKey } ?? screen
+    }
+
+    /// そのディスプレイの使える範囲（メニューバーと Dock を除いた範囲）
+    var visibleFrame: CGRect {
+        currentScreen.visibleFrame
+    }
+
+    /// ストリップを出す辺
+    var edge: StripEdge {
+        stage.stripSettings.edge
+    }
+
+    /// 横長の帯で出しているか（上・下）
+    var isHorizontal: Bool {
+        edge.isHorizontal
+    }
+
+    /// 前に置いたときの辺（辺を変えたときは、形が変わるので、動きを付けずに置き直す）
+    private var placedEdge: StripEdge?
 
     /// このストリップに並べる候補（このデスクトップ・このディスプレイのウインドウ）。
     /// ほかのデスクトップに切り替えている間も、このデスクトップの一覧のまま
@@ -136,7 +174,7 @@ final class StripController {
     /// 「自動で隠す」に変えたとき、ポインタがストリップの上にあれば（ストリップのボタンで変えたときなど）、すぐには隠さず、離れてから隠す
     func applySettings() {
         let alwaysShown = stage.stripSettings.mode == .alwaysShown
-        if !alwaysShown, isShown, !StripGeometry.shouldHide(pointer: NSEvent.mouseLocation, stripFrame: panel.frame) {
+        if !alwaysShown, isShown, isPointerNear(NSEvent.mouseLocation) {
             relayout()
             return
         }
@@ -164,10 +202,10 @@ final class StripController {
         trackPointer()
     }
 
-    /// 右の縁のドラッグを離したのに、終わりの知らせが届かなかったとき（ドラッグの途中でストリップの形が変わると、届かないことがある）は、
+    /// 内側の縁のドラッグを離したのに、終わりの知らせが届かなかったとき（ドラッグの途中でストリップの形が変わると、届かないことがある）は、
     /// ここで幅を決める（決めないと、見た目の幅だけが変わり、ステージの範囲は前の幅のまま残る）
     private func finishResizeIfReleased() {
-        guard resizingWidth != nil, NSEvent.pressedMouseButtons == 0 else { return }
+        guard spaceState.resizingWidth != nil, NSEvent.pressedMouseButtons == 0 else { return }
         DesktopTrace.log("ストリップの幅", "ドラッグの終わりの知らせが届かなかったので、ここで決める")
         endResize()
     }
@@ -177,55 +215,63 @@ final class StripController {
         guard stage.stripSettings.mode == .autoHide, !isDragging else { return }
         let pointer = NSEvent.mouseLocation
         if !isShown {
-            // ポインタの位置を先に比べる（表に出ているデスクトップかを調べるのは、左端に寄せたときだけで済む）
-            guard StripGeometry.shouldReveal(pointer: pointer, screenFrame: screen.frame), isOnActiveSpace else { return }
-            // 左端に寄せて出したときは、ふつうの決まり（離れたら隠す）
+            // ポインタの位置を先に比べる（表に出ているデスクトップかを調べるのは、端に寄せたときだけで済む）
+            guard StripGeometry.shouldReveal(pointer: pointer, screenFrame: currentScreen.frame, edge: edge), isOnActiveSpace else { return }
+            // 端に寄せて出したときは、ふつうの決まり（離れたら隠す）
             autoHide.reset()
             placePanel(shown: true, animated: true)
         } else {
             // ほかのデスクトップのストリップは動かさない
             guard isOnActiveSpace else { return }
-            if autoHide.shouldHide(pointerNear: !StripGeometry.shouldHide(pointer: pointer, stripFrame: panel.frame)) {
+            if autoHide.shouldHide(pointerNear: isPointerNear(pointer)) {
                 placePanel(shown: false, animated: true)
             }
         }
     }
 
-    // MARK: - 幅を変える（右の縁のドラッグ）
-
-    /// ドラッグしている途中の幅（ドラッグしていなければ nil）
-    private var resizingWidth: CGFloat?
-
-    /// 右の縁をドラッグしている途中。ポインタの位置に合わせて、その場で幅を変える（保存はドラッグを終えたとき）
-    func resize(toPointerX x: CGFloat) {
-        isDragging = true
-        let width = StripGeometry.width(forPointerX: x, in: screen.visibleFrame)
-        resizingWidth = width
-        panel.setFrame(StripGeometry.shownFrame(in: screen.visibleFrame, width: width), display: true)
+    /// ポインタが、出しているストリップの近くにあるか（ストリップと画面の端との間も、近くに入れる）
+    private func isPointerNear(_ pointer: CGPoint) -> Bool {
+        !StripGeometry.shouldHide(pointer: pointer, stripFrame: panel.frame, screenFrame: currentScreen.frame, edge: edge)
     }
 
-    /// 右の縁のドラッグを終えた。幅を保存する（ほかのディスプレイのストリップと、ステージの並びも合わせる）
+    // MARK: - 幅を変える（左右のストリップの、内側の縁のドラッグ）
+
+    /// 内側の縁をドラッグしている途中。ポインタの位置に合わせて、その場で幅を変える（保存はドラッグを終えたとき）
+    func resize(toPointerX x: CGFloat) {
+        guard !isHorizontal else { return }
+        isDragging = true
+        let width = StripGeometry.width(forPointerX: x, in: visibleFrame, edge: edge, range: stage.stripSettings.widthRange)
+        if spaceState.resizingWidth != width { spaceState.resizingWidth = width }
+        panel.setFrame(StripGeometry.shownFrame(in: visibleFrame, edge: edge, thickness: width), display: true)
+    }
+
+    /// 内側の縁のドラッグを終えた。幅を保存する（ほかのディスプレイのストリップと、ステージの並びも合わせる）
     func endResize() {
         isDragging = false
-        guard let width = resizingWidth else { return }
-        resizingWidth = nil
+        guard let width = spaceState.resizingWidth else { return }
+        spaceState.resizingWidth = nil
         DesktopTrace.log("ストリップの幅", "決めた: \(Int(width))")
-        stage.stripSettings.stripWidth = width
+        // いまの形式の幅として覚える（アイコンの並びの幅は、一覧・サムネイルの幅とは別）
+        stage.stripSettings.width = width
     }
 
     private func placePanel(shown: Bool, animated: Bool) {
         let wasShown = isShown
         isShown = shown
         if shown, !wasShown { onShow?() }
-        let visible = screen.visibleFrame
-        let width = stage.stripSettings.effectiveWidth
+        let visible = visibleFrame
+        let edge = edge
+        let thickness = stage.stripSettings.effectiveThickness
         let target = shown
-            ? StripGeometry.shownFrame(in: visible, width: width)
-            : StripGeometry.hiddenFrame(in: visible, width: width)
+            ? StripGeometry.shownFrame(in: visible, edge: edge, thickness: thickness)
+            : StripGeometry.hiddenFrame(in: visible, edge: edge, thickness: thickness)
+        // 辺を変えたときは、縦長と横長が入れ替わるので、動きを付けずに置き直す
+        let movedEdge = placedEdge != nil && placedEdge != edge
+        placedEdge = edge
         // 画面から外す（orderOut）と、置いたデスクトップを忘れてしまうので、隠すときは透明にして画面の外へ置く。
-        // 隠している間はクリックを素通りさせる（左隣のディスプレイの右端に重なっても、邪魔にならないように）
+        // 隠している間はクリックを素通りさせる（隣のディスプレイの端に重なっても、邪魔にならないように）
         panel.ignoresMouseEvents = !shown
-        guard animated else {
+        guard animated, !movedEdge else {
             panel.setFrame(target, display: true)
             panel.alphaValue = shown ? 1 : 0
             return
