@@ -266,3 +266,13 @@ struct HiddenWindowsTests {
     }
 }
 
+@Suite("すべてのデスクトップに割り当てたウインドウ")
+struct AllDesktopsTests {
+    @Test("2 つ以上のデスクトップに属していれば、すべてのデスクトップのウインドウ")
+    func allDesktops() {
+        #expect(WindowSpaces.isOnAllDesktops([5, 6, 7]))
+        #expect(WindowSpaces.isOnAllDesktops([5, 6]))
+        #expect(!WindowSpaces.isOnAllDesktops([5]))
+        #expect(!WindowSpaces.isOnAllDesktops([]))
+    }
+}

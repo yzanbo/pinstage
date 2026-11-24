@@ -248,10 +248,16 @@ private struct WindowRow: View {
         stage.desktopName(of: item, except: strip.spaceID)
     }
 
+    /// すべてのデスクトップに割り当てたウインドウか（どのデスクトップのウインドウバーにも並ぶ）
+    private var isOnAllDesktops: Bool {
+        stage.isOnAllDesktops(item)
+    }
+
     /// ポインタを乗せたときの説明（名前は行に収まらないことがあるので、ここにすべて出す。アプリの名前も添える）
     private var helpText: String {
         var operations = "クリックで出す・ダブルクリックで画面いっぱいに広げる・⌘＋クリックで足す/外す・ステージへドラッグで足す・グループの上へドラッグでグループに入れる"
         if let desktopName { operations = "\(desktopName.title)のウインドウです（クリックで、そのデスクトップへ移って出す）\n" + operations }
+        if isOnAllDesktops { operations = "すべてのデスクトップに割り当てたウインドウです（どのデスクトップのウインドウバーにも並びます）\n" + operations }
         let name = item.title.isEmpty ? item.appName : "\(item.title)（\(item.appName)）"
         return name + "\n" + operations
     }
@@ -260,6 +266,10 @@ private struct WindowRow: View {
     private var content: some View {
         if showsIconOnly {
             appIcon(size: kind.iconSize)
+                // アイコンだけのときは、すべてのデスクトップの印を、絵だけでアイコンの右上の角に添える（Dock の数字の印と同じ置き方）
+                .overlay(alignment: .topTrailing) {
+                    if isOnAllDesktops { DesktopBadge.allDesktopsCorner(iconSize: kind.iconSize) }
+                }
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .bottomTrailing) { minimizedMark }
         } else if showsThumbnail {
@@ -322,21 +332,14 @@ private struct WindowRow: View {
         }
     }
 
-    /// ほかのデスクトップのウインドウの短い印（重なった四角と、デスクトップの番号。名前を押しのけないように短くする）
+    /// デスクトップの印（ほかのデスクトップのウインドウなら、その番号。すべてのデスクトップに割り当てたウインドウなら「すべて」）
     @ViewBuilder
     private var desktopMark: some View {
-        if let desktopName {
-            HStack(spacing: 2) {
-                Image(systemName: "rectangle.on.rectangle")
-                Text(desktopName.shortLabel)
-            }
-            .font(.system(size: 9, weight: .medium))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .background(Capsule().fill(Color.primary.opacity(0.08)))
+        if isOnAllDesktops {
+            // 横長の帯は行の幅が決まっていて、名前を押しのけてしまうので、絵だけにする（説明はポインタを乗せると出る）
+            DesktopBadge(symbol: DesktopBadge.allDesktopsSymbolName, label: fixedWidth == nil ? "すべて" : nil)
+        } else if let desktopName {
+            DesktopBadge(symbol: DesktopBadge.otherDesktopSymbolName, label: desktopName.shortLabel)
         }
     }
 
@@ -388,5 +391,42 @@ private struct RowFrame: ViewModifier {
         } else {
             content.frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
         }
+    }
+}
+
+/// デスクトップの短い印（絵と短い名前。名前を押しのけないように短くする。名前がなければ絵だけ）
+private struct DesktopBadge: View {
+    let symbol: String
+    var label: String?
+
+    /// ほかのデスクトップのウインドウの印の絵（四角が 2 つ重なった形。番号を添える）
+    static let otherDesktopSymbolName = "rectangle.on.rectangle"
+    /// すべてのデスクトップに割り当てたウインドウの印の絵（デスクトップが重なった形）
+    static let allDesktopsSymbolName = "rectangle.stack"
+
+    /// アイコンだけのときに、アイコンの右上の角に添える、すべてのデスクトップの印（絵だけ。アイコンの大きさに合わせ、角から少しはみ出させる）
+    static func allDesktopsCorner(iconSize: CGFloat) -> some View {
+        let diameter = max(11, (iconSize * 0.45).rounded())
+        return Image(systemName: allDesktopsSymbolName)
+            .font(.system(size: diameter * 0.6, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .frame(width: diameter, height: diameter)
+            .background(Circle().fill(.regularMaterial))
+            .offset(x: diameter * 0.35, y: -diameter * 0.35)
+            .help("すべてのデスクトップに割り当てたウインドウ")
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: symbol)
+            if let label { Text(label) }
+        }
+        .font(.system(size: 9, weight: .medium))
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.horizontal, 4)
+        .padding(.vertical, 1)
+        .background(Capsule().fill(Color.primary.opacity(0.08)))
     }
 }

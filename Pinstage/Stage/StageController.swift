@@ -204,6 +204,11 @@ final class StageController {
         }
     }
 
+    /// すべてのデスクトップに割り当てたウインドウか（決まりは PinstageCore の WindowSpaces。デスクトップが分からなければ false）
+    func isOnAllDesktops(_ item: WindowItem) -> Bool {
+        windowSpaces?[item.id].map(WindowSpaces.isOnAllDesktops) ?? false
+    }
+
     /// デスクトップを切り替えた（StripManager から）
     func noteSpaceChanged() {
         spaceChangedAt = ProcessInfo.processInfo.systemUptime
@@ -211,7 +216,8 @@ final class StageController {
 
     /// ウインドウのあるデスクトップの名前（except のデスクトップにあるとき・分からないときは nil）
     func desktopName(of item: WindowItem, except space: UInt64?) -> DesktopName? {
-        guard let spaces = windowSpaces?[item.id], !spaces.isEmpty else { return nil }
+        // すべてのデスクトップに割り当てたウインドウは、どのデスクトップにもあるので、ほかのデスクトップの印は付けない
+        guard let spaces = windowSpaces?[item.id], !spaces.isEmpty, !WindowSpaces.isOnAllDesktops(spaces) else { return nil }
         if let space, spaces.contains(space) { return nil }
         return spaces.lazy.compactMap { self.desktopNames[$0] }.first
     }
@@ -611,16 +617,20 @@ final class StageController {
         isSystemStageManagerOn: Bool = false,
         layout: LayoutChoice? = nil,
         customLayouts: [CustomLayout] = [],
-        otherDesktop: [AXUIElement] = []
+        otherDesktop: [AXUIElement] = [],
+        allDesktops: [AXUIElement] = []
     ) {
         self.windows = windows
         self.isTrusted = isTrusted
         self.isSystemStageManagerOn = isSystemStageManagerOn
         currentSpaceIDs = Set(windows.map(\.id))
         library = StageLibrary(groups: groups, customLayouts: customLayouts)
-        if !otherDesktop.isEmpty {
-            windowSpaces = Dictionary(uniqueKeysWithValues: otherDesktop.map { ($0, Set([UInt64(2)])) })
-            desktopNames = [2: DesktopName(number: 2)]
+        if !otherDesktop.isEmpty || !allDesktops.isEmpty {
+            // ほかのデスクトップ（2）のウインドウと、すべてのデスクトップ（1〜3）に割り当てたウインドウ
+            let other = otherDesktop.map { ($0, Set([UInt64(2)])) }
+            let all = allDesktops.map { ($0, Set<UInt64>([1, 2, 3])) }
+            windowSpaces = Dictionary(other + all, uniquingKeysWith: { first, _ in first })
+            desktopNames = [1: DesktopName(number: 1), 2: DesktopName(number: 2), 3: DesktopName(number: 3)]
         }
         updateStage(on: screen, apply: false) { stage in
             stage.selection.replace(with: onStage)

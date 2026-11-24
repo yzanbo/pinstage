@@ -26,6 +26,8 @@ enum StripPreview {
         case otherDesktop
         /// 同じアプリのウインドウが 2 つずつある（となりに並べてつなぐ）
         case sameApp
+        /// すべてのデスクトップに割り当てたウインドウがある
+        case allDesktops
     }
 
     /// ストリップのほかに描ける画面
@@ -188,7 +190,8 @@ enum StripPreview {
                 ? .recorded([UnitRect(x: 0, y: 0, width: 0.6, height: 0.7), UnitRect(x: 0.3, y: 0.25, width: 0.7, height: 0.75)])
                 : nil,
             customLayouts: customLayouts,
-            otherDesktop: scenario == .otherDesktop ? [windows[1].id, windows[4].id] : []
+            otherDesktop: scenario == .otherDesktop ? [windows[1].id, windows[4].id] : [],
+            allDesktops: scenario == .allDesktops ? [windows[1].id, windows[5].id] : []
         )
         body(Sample(stage: stage, windows: windows, groups: groups, screen: screen))
     }
