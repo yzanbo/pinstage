@@ -267,9 +267,14 @@ final class StripManager {
     /// デスクトップの切り替えの記録（開発用のビルドだけ）。ストリップごとに、
     /// 番号・表に出ているデスクトップにあるか（A）・画面の一覧に出ているか（S）・隠しているか（h）・覚えているウインドウの数を書く
     private func trace(_ event: @autoclosure () -> String, onScreen numbers: @autoclosure () -> Set<Int>) {
-        #if DEBUG
-        let numbers = numbers()
-        let detail = strips.map { strip in
+        DesktopTrace.log(
+            "デスクトップ",
+            "\(event()) [\(describeStrips(onScreen: numbers()))] windows=\(stage.desktopSnapshot?.onScreen.count ?? -1)"
+        )
+    }
+
+    private func describeStrips(onScreen numbers: Set<Int>) -> String {
+        strips.map { strip in
             let display = NSScreen.screens.firstIndex(of: strip.screen) ?? -1
             return "#\(strip.windowNumber)@\(display)" + (strip.spaceID.map { "/\($0)" } ?? "")
                 + (strip.isOnActiveSpace ? "A" : "-")
@@ -277,8 +282,7 @@ final class StripManager {
                 + (strip.isShown ? "" : "h")
                 + ":\(strip.desktop.windows.count)"
         }
-        DesktopTrace.log("\(event()) [\(detail.joined(separator: " "))] windows=\(stage.desktopSnapshot?.onScreen.count ?? -1)")
-        #endif
+        .joined(separator: " ")
     }
 
     // MARK: - 出す・隠す

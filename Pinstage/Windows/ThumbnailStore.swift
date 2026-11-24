@@ -58,6 +58,7 @@ final class ThumbnailStore {
     func captureNow() {
         hasPermission = CGPreflightScreenCaptureAccess()
         let items = targets()
+        DesktopTrace.log("サムネイル", "許可=\(hasPermission) 撮るウインドウ=\(items.count)")
         guard hasPermission, !items.isEmpty, !isCapturing else { return }
         isCapturing = true
         Task {
@@ -67,7 +68,13 @@ final class ThumbnailStore {
     }
 
     private func capture(_ items: [WindowItem]) async {
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false) else { return }
+        let content: SCShareableContent
+        do {
+            content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
+        } catch {
+            DesktopTrace.log("サムネイルの失敗", "ウインドウの一覧を読めない: \(error.localizedDescription)")
+            return
+        }
         let windows = content.windows.filter { $0.windowLayer == 0 && $0.owningApplication != nil }
         let candidates = windows.map {
             CaptureWindowMatcher.Window(pid: $0.owningApplication?.processID ?? 0, title: $0.title ?? "", frame: $0.frame)
@@ -84,13 +91,17 @@ final class ThumbnailStore {
         }
         // 閉じたウインドウのサムネイルは捨てる。いま撮らないウインドウ（ほかのデスクトップのものなど）は、前に撮ったものを残す
         prune(keeping: existing().union(items.map(\.id)))
+        var captured = 0
         for (item, match) in zip(items, matches) {
             // しまってあるウインドウは撮れないので、前に撮ったものを残す
             guard let match, !item.isMinimized else { continue }
             if let image = await captureImage(of: windows[match]) {
                 images[item.id] = image
+                captured += 1
             }
         }
+        // 撮れないときに、許可・照らし合わせ・撮影のどこで止まったかを確かめるための記録
+        DesktopTrace.log("サムネイルの結果", "照らし合わせた=\(matches.compactMap { $0 }.count) 撮れた=\(captured)")
     }
 
     private func captureImage(of window: SCWindow) async -> NSImage? {
@@ -103,7 +114,12 @@ final class ThumbnailStore {
         config.height = max(1, Int(rect.height * scale))
         config.showsCursor = false
         config.ignoreShadowsSingleWindow = true
-        guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) else { return nil }
-        return NSImage(cgImage: image, size: rect.size)
+        do {
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            return NSImage(cgImage: image, size: rect.size)
+        } catch {
+            DesktopTrace.log("サムネイルの失敗", "撮れない: \(error.localizedDescription)")
+            return nil
+        }
     }
 }
