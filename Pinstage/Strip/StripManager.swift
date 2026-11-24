@@ -58,12 +58,12 @@ final class StripManager {
         // 読み直したら、そのとき画面に出ているストリップに、そのデスクトップのウインドウの一覧を覚えさせる
         stage.addRefreshHandler { [weak self] in self?.windowsRefreshed() }
         stage.onStripSettingsChanged = { [weak self] old in self?.settingsChanged(from: old) }
-        // ストリップに並べているウインドウだけを撮る（小・隠しているときは撮らない）
+        // ウインドウバーに並べて、スクロールして見えている行のウインドウだけを撮る（サムネイルの形式でないとき・隠しているときは撮らない）
         thumbnails.targets = { [weak self] in
             guard let self, stage.stripSettings.capturesThumbnails, anyShown else { return [] }
-            // ディスプレイごとのストリップに並べているウインドウを、重ならないように集める
+            // ディスプレイごとのウインドウバーの、見えている行のウインドウを、重ならないように集める
             var seen = Set<AXUIElement>()
-            return activeStrips.flatMap(\.rows).filter { seen.insert($0.id).inserted }
+            return activeStrips.flatMap(\.thumbnailTargets).filter { seen.insert($0.id).inserted }
         }
         // ほかのデスクトップのウインドウのサムネイルも残しておく（切り替えの途中から、行き先のストリップに出ているように）
         thumbnails.existing = { Set(stage.windows.map(\.id)) }
@@ -101,6 +101,7 @@ final class StripManager {
     /// （2 回目からは、そのデスクトップに置いてあるストリップが、前に覚えた一覧のまま切り替えと一緒に出てくる）
     private func spaceChanged() {
         trace("activeSpaceDidChange", onScreen: CurrentSpace.ownWindowNumbersOnScreen())
+        stage.noteSpaceChanged()
         if usesSystemSpaces {
             // ストリップはすべてのデスクトップに置いてあり、一覧もデスクトップの番号で決めてあるので、読み直すだけでよい
             syncSpaces()
@@ -333,8 +334,9 @@ final class StripManager {
 
     private func settingsChanged(from old: StripSettings) {
         let new = stage.stripSettings
-        // 「ほかのデスクトップ／ディスプレイのウインドウも出す」を変えたら、見分け直す
-        if new.showsOtherSpaces != old.showsOtherSpaces || new.showsOtherDisplays != old.showsOtherDisplays || new.displays != old.displays {
+        // 出すディスプレイを変えたら見分け直し、「同じアプリのウインドウをまとめる」を変えたら、読み直して並びを合わせる
+        if new.displays != old.displays
+            || new.groupsSameApp != old.groupsSameApp {
             stage.refresh()
         }
         if new.displays != old.displays {
@@ -345,7 +347,7 @@ final class StripManager {
             strips.forEach { $0.relayout() }
         }
         // ステージの範囲が変わったので、並べているウインドウを並べ直す（常に出すときだけ、ストリップの厚みと辺でステージが変わる）
-        let placementChanged = new.effectiveThickness != old.effectiveThickness || new.edge != old.edge
+        let placementChanged = new.effectiveThickness != old.effectiveThickness || new.edge != old.edge || new.stageGap != old.stageGap
         if new.mode != old.mode || (new.mode == .alwaysShown && placementChanged) {
             // ステージが広がった側では、ストリップの横にくっつけていたウインドウも、新しい端まで広げる
             stage.followWidenedStage(from: old)

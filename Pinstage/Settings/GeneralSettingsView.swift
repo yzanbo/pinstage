@@ -16,7 +16,7 @@ struct GeneralSettingsView: View {
                 )) {
                     SettingTitle(
                         "ログイン時に起動",
-                        info: "Mac にログインしたときに、Pinstage を起動してストリップを出します。システム設定の「一般」→「ログイン項目」でも切り替えられます。"
+                        info: "Mac にログインしたときに、Pinstage を起動してウインドウバーを出します。システム設定の「一般」→「ログイン項目」でも切り替えられます。"
                     )
                 }
                 if launchAtLogin.needsApproval {
@@ -33,10 +33,10 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            Section("ステージ") {
+            Section("ウインドウを出すとき") {
                 OptionPicker(
                     "1 枚だけ出すときの大きさ",
-                    info: "ストリップでウインドウを 1 つだけクリックしたときの大きさです（並べ方が「重ねる」のときと、登録した型のときは、型の大きさになります）。ダブルクリックすると、いつもステージいっぱいに広げます。",
+                    info: "ウインドウバーでウインドウを 1 つだけクリックしたときの大きさです（登録した型・記録した配置のときは、型の大きさになります）。ダブルクリックすると、いつもステージいっぱいに広げます。",
                     selection: Binding(get: { stage.singleWindowSize }, set: { stage.singleWindowSize = $0 })
                 )
             }

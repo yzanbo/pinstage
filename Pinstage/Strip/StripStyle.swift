@@ -82,42 +82,51 @@ extension View {
     }
 }
 
-/// ストリップのいちばん上の帯（検索・見た目・ピン）
+/// ウインドウバーのいちばん上の帯（検索・並べ方・見た目・ピン）
 struct StripToolbar: View {
     let stage: StageController
     let shortcuts: ShortcutCenter
     let actions: AppActions
+    /// このウインドウバーのディスプレイ（並べ方は、ディスプレイごとのステージにかける）
+    let screen: NSScreen
     /// アイコンだけの細い帯で出しているか（アイコンの並びを狭めたとき）
     let compact: Bool
     /// 横長の帯（上下のストリップ）に並べるか
     var horizontal = false
 
     var body: some View {
-        if horizontal {
-            // 横長の帯: 横に並べる
-            HStack(spacing: 2) {
-                SearchField(shortcut: shortcuts.shortcut(for: .search)?.displayString, action: actions.openSearch)
-                    .frame(width: 110)
-                StripLookButton(stage: stage)
-                StripModeButton(stage: stage)
-            }
-        } else if compact {
-            // 細い帯: アイコンを縦に並べる
+        if compact, !horizontal {
+            // 細い帯: アイコンを縦に並べる（検索もアイコンだけ）
             VStack(spacing: 2) {
                 Button { actions.openSearch() } label: { StripIconLabel(systemName: "magnifyingglass") }
                     .buttonStyle(.plain)
                     .help("ウインドウ・グループを検索")
-                StripLookButton(stage: stage)
-                StripModeButton(stage: stage)
+                buttons
             }
             .frame(maxWidth: .infinity)
         } else {
             HStack(spacing: 2) {
-                SearchField(shortcut: shortcuts.shortcut(for: .search)?.displayString, action: actions.openSearch)
-                StripLookButton(stage: stage)
-                StripModeButton(stage: stage)
+                // 横長の帯では、ウインドウの並びに場所を譲るよう、検索の欄の幅を決める
+                if horizontal {
+                    searchField.frame(width: 110)
+                } else {
+                    searchField
+                }
+                buttons
             }
         }
+    }
+
+    private var searchField: some View {
+        SearchField(shortcut: shortcuts.shortcut(for: .search)?.displayString, action: actions.openSearch)
+    }
+
+    /// 並べ方・見た目・ピンのボタン
+    @ViewBuilder
+    private var buttons: some View {
+        StripLayoutButton(stage: stage, screen: screen, actions: actions)
+        StripLookButton(stage: stage)
+        StripModeButton(stage: stage)
     }
 }
 
@@ -186,7 +195,7 @@ struct StripLookButton: View {
                 .labelsHidden()
             }
             Section("位置") {
-                Picker("ストリップの位置", selection: Binding(
+                Picker("ウインドウバーの位置", selection: Binding(
                     get: { stage.stripSettings.edge },
                     set: { stage.stripSettings.edge = $0 }
                 )) {
@@ -221,23 +230,5 @@ struct StripModeButton: View {
         .help(mode == .alwaysShown
             ? "常に出しています。押すと、画面の\(edgeTitle)の端に寄せたときだけ出します"
             : "画面の\(edgeTitle)の端に寄せたときだけ出しています。押すと、常に出します")
-    }
-}
-
-/// 強調するボタンの見た目（ストリップは前面のウインドウにならないので、標準の強調ボタンだと灰色になる。いつも色を付ける）
-struct StripPrimaryButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(isEnabled ? Color.white : Color.secondary)
-            .frame(maxWidth: .infinity, minHeight: 28)
-            .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isEnabled ? Color.accentColor.opacity(configuration.isPressed ? 0.75 : 1) : Color.primary.opacity(0.08))
-            )
-            .contentShape(Rectangle())
     }
 }

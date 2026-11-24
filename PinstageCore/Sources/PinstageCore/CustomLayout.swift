@@ -58,7 +58,7 @@ public struct CustomLayout: Codable, Equatable, Identifiable, Sendable {
         self.slots = slots
     }
 
-    /// ステージの範囲に当てはめる。型の枠より多いウインドウは、型の枠に入らなかった分を「重ねる」で置く
+    /// ステージの範囲に当てはめる。型の枠より多いウインドウは、型の枠に入らなかった分を、少しずつずらして重ねて置く
     public func frames(count: Int, in area: CGRect) -> [CGRect] {
         Self.frames(slots: slots, count: count, in: area)
     }
@@ -69,7 +69,7 @@ public struct CustomLayout: Codable, Equatable, Identifiable, Sendable {
         let used = slots.prefix(count).map { $0.rect(in: area) }
         let rest = count - used.count
         guard rest > 0 else { return used }
-        return used + StageLayout.frames(count: rest, in: area, kind: .cascade)
+        return used + StageLayout.cascade(count: rest, in: area)
     }
 }
 
@@ -79,14 +79,6 @@ public enum LayoutChoice: Codable, Equatable, Hashable, Sendable {
     case custom(UUID)
     /// 見えている画面をそのまま記録した配置（ウインドウごとの枠。並びは重なりの順番＝後ろほど前面）
     case recorded([UnitRect])
-
-    /// 余白を型そのものが持っているか（登録した型・記録した配置では、「余白を空ける」を使わない）
-    public var hasOwnSpacing: Bool {
-        switch self {
-        case .builtIn: false
-        case .custom, .recorded: true
-        }
-    }
 
     /// 記録した配置から、kept が false のメンバーの枠を抜く（ほかの並べ方はそのまま）
     public func keepingSlots(where kept: [Bool]) -> LayoutChoice {
@@ -104,7 +96,7 @@ public enum LayoutChoice: Codable, Equatable, Hashable, Sendable {
     /// 記録した配置の、メニューなどに出す名前
     public static let recordedTitle = "記録した配置"
 
-    /// 並べ方の名前（消した型は「自動（均等）」）
+    /// 並べ方の名前（消した型は「自動」）
     public func title(customLayouts: [CustomLayout]) -> String {
         switch self {
         case .builtIn(let kind): kind.title
@@ -113,22 +105,20 @@ public enum LayoutChoice: Codable, Equatable, Hashable, Sendable {
         }
     }
 
-    /// 1 枚だけ出すときも、型に合わせて大きさを変えるか（用意した型のうち「重ねる」以外は、大きさを変えずに前に出す）
+    /// 1 枚だけ出すときも、型に合わせて大きさを変えるか（用意した型は、1 枚だと画面いっぱいになってしまうので、大きさを変えずに前に出す）
     public var resizesSingleWindow: Bool {
         switch self {
-        case .builtIn(let kind): kind.resizesSingleWindow
+        case .builtIn: false
         case .custom, .recorded: true
         }
     }
 
     /// ステージの範囲に当てはめた、ウインドウごとの枠（実際に並べるときも、グループの見本を描くときも、ここで決める）
-    /// - Parameters:
-    ///   - gap: 間の幅（用意した型だけに使う。登録した型・記録した配置は、型そのものに間が入っている）
-    ///   - customLayouts: 登録した型（消した型は「自動（均等）」で並べる）
-    public func frames(count: Int, in area: CGRect, gap: CGFloat, customLayouts: [CustomLayout]) -> [CGRect] {
+    /// - Parameter customLayouts: 登録した型（消した型は「自動」で並べる）
+    public func frames(count: Int, in area: CGRect, customLayouts: [CustomLayout]) -> [CGRect] {
         switch self {
         case .builtIn(let kind):
-            return StageLayout.frames(count: count, in: area, kind: kind, gap: gap)
+            return StageLayout.frames(count: count, in: area, kind: kind)
         case .recorded(let slots):
             return CustomLayout.frames(slots: slots, count: count, in: area)
         case .custom(let id):

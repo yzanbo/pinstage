@@ -14,20 +14,19 @@ public enum GroupPreview {
     /// グループを呼び出したときの並び
     /// - Parameter customLayouts: 登録した型（グループが登録した型を使うとき、ここから探す）
     public static func slots(for group: StageGroup, customLayouts: [CustomLayout]) -> [UnitRect] {
-        slots(count: group.members.count, layout: group.layout, hasGap: group.hasGap, customLayouts: customLayouts)
+        slots(count: group.members.count, layout: group.layout, customLayouts: customLayouts)
     }
 
     /// - Parameters:
     ///   - count: グループのウインドウの数
     ///   - layout: グループの並べ方
-    ///   - hasGap: 間を空けて並べるか（用意した型のときだけ）
     ///   - customLayouts: 登録した型
-    public static func slots(count: Int, layout: LayoutChoice, hasGap: Bool, customLayouts: [CustomLayout]) -> [UnitRect] {
+    public static func slots(count: Int, layout: LayoutChoice, customLayouts: [CustomLayout]) -> [UnitRect] {
         guard count > 0 else { return [] }
         if count == 1, !layout.resizesSingleWindow { return [singleSlot] }
         let area = referenceArea
         // 枠は、実際に並べるときと同じ計算で決める
-        let frames = layout.frames(count: count, in: area, gap: hasGap ? StageLayout.gapWidth : 0, customLayouts: customLayouts)
+        let frames = layout.frames(count: count, in: area, customLayouts: customLayouts)
         return frames.map { UnitRect(frame: $0, in: area) }
     }
 }

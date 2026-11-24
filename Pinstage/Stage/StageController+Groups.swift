@@ -13,7 +13,7 @@ extension StageController {
         let stage = self.stage(on: screen)
         let members = stageItems(on: screen).compactMap(\.signature)
         guard !members.isEmpty else { return nil }
-        return StageGroup.Content(members: members, layout: stage.layout, hasGap: stage.hasGap, displayID: screen.displayUUID)
+        return StageGroup.Content(members: members, layout: stage.layout, displayID: screen.displayUUID)
     }
 
     /// 見えている画面から、グループの中身を作る（位置・大きさ・重なりの順番ごと記録する）。ステージも、その組み合わせにする
@@ -24,12 +24,10 @@ extension StageController {
         updateStage(on: screen, apply: false) { stage in
             stage.selection.replace(with: arrangement.map(\.item.id))
             stage.layout = layout
-            stage.hasGap = false
         }
         return StageGroup.Content(
             members: arrangement.compactMap(\.item.signature),
             layout: layout,
-            hasGap: false,
             displayID: screen.displayUUID
         )
     }
@@ -79,6 +77,26 @@ extension StageController {
     /// グループの編集画面で直したグループを保存する（同じ ID のグループを置き換える）
     func updateGroup(_ group: StageGroup) {
         editLibrary { $0.updateGroup(group) }
+    }
+
+    /// グループの並べ方を変える（右クリックの「並べ方」）。選んだらすぐ、ステージに映す
+    /// - そのグループを呼び出したまま、ステージの中身を変えていなければ、その場で並び直す
+    /// - そうでなければ、そのグループを、選んだ並べ方で呼び出す
+    /// - Parameter fallback: グループにディスプレイを決めていないときに出すディスプレイ（右クリックしたウインドウバーのディスプレイ）
+    func setLayout(_ choice: LayoutChoice, ofGroup id: UUID, fallback: NSScreen?) {
+        guard var group = library.group(id: id) else { return }
+        if group.layout != choice {
+            group.layout = choice
+            updateGroup(group)
+        }
+        if lastRecalledGroupID == id, let shown = lastRecalledStage,
+           let screen = NSScreen.screens.first(where: { Self.displayKey($0) == shown.screenKey }),
+           Set(stage(on: screen).selection.members) == shown.windows {
+            setLayout(choice, on: screen)
+        } else {
+            let updated = group
+            Task { await recall(updated, fallback: fallback) }
+        }
     }
 
     func renameGroup(_ id: UUID, to name: String) {
@@ -132,7 +150,7 @@ extension StageController {
 
     // MARK: - ストリップに並べる
 
-    /// そのディスプレイのストリップに並べるグループ（ストリップが 1 つのとき・「ほかのディスプレイのウインドウ・グループも出す」ならすべて）
+    /// そのディスプレイのウインドウバーに並べるグループ（ウインドウバーが 1 つのときはすべて）
     func groups(on screen: NSScreen) -> [StageGroup] {
         guard separatesDisplays else { return library.groups }
         let connected = Set(NSScreen.screens.compactMap(\.displayUUID))

@@ -13,7 +13,7 @@ import PinstageCore
 /// グループの保存・編集は StageController+Groups.swift、登録した型は StageController+Layouts.swift にある。
 @Observable
 final class StageController {
-    /// いま開いているウインドウ（新しく開いたものが先頭。ほかのデスクトップのものも含む）
+    /// いま開いているウインドウ（ウインドウバーの並び順。新しく開いたものが末尾。ほかのデスクトップのものも含む）
     private(set) var windows: [WindowItem] = []
     /// いま見ているデスクトップ（操作スペース）にあるウインドウ
     private(set) var currentSpaceIDs: Set<AXUIElement> = []
@@ -22,9 +22,13 @@ final class StageController {
     /// いちばん新しく読んだ、画面に出ているウインドウの一覧（読んでいなければ nil）。
     /// ストリップが、自分のデスクトップのウインドウの一覧を覚えるのに使う
     @ObservationIgnored private(set) var desktopSnapshot: DesktopSnapshot<AXUIElement>?
-    /// ウインドウごとの、あるデスクトップ（非公開の API で読む。読めないとき・見分けない設定のときは nil）。
+    /// ウインドウごとの、あるデスクトップ（非公開の API で読む。読めないときは nil）。
     /// デスクトップごとのストリップが、自分のデスクトップのウインドウを決めるのに使う
     private(set) var windowSpaces: [AXUIElement: Set<UInt64>]?
+    /// 隠されたウインドウ（× で閉じてもウインドウを捨てずに隠すだけのアプリのもの）。ウインドウバーには並べない（並び順の記録には残す）
+    private(set) var hiddenWindowIDs: Set<AXUIElement> = []
+    /// 最後にデスクトップを切り替えた時刻（切り替えた直後は、行き先のウインドウがまだ画面に出ていないことがあるので、隠されたかを見分けない）
+    @ObservationIgnored private var spaceChangedAt: TimeInterval = 0
     /// デスクトップの名前（「デスクトップ 3」など。ディスプレイごとに左から数える。非公開の API で読む）
     private(set) var desktopNames: [UInt64: DesktopName] = [:]
     /// ほかのデスクトップのウインドウを探す（非公開の API）
@@ -45,6 +49,9 @@ final class StageController {
     private(set) var recallingGroupID: UUID?
     /// 最後に呼び出したグループ（「次のグループ」「前のグループ」の起点）
     private(set) var lastRecalledGroupID: UUID?
+    /// 最後に呼び出したグループを出したディスプレイと、そのとき出したウインドウ
+    /// （グループの並べ方を変えたとき、まだそのまま出していれば、その場で並び直すため）
+    private(set) var lastRecalledStage: (screenKey: String, windows: Set<AXUIElement>)?
     /// ストリップの設定
     var stripSettings: StripSettings {
         didSet {
@@ -53,8 +60,6 @@ final class StageController {
             onStripSettingsChanged?(oldValue)
         }
     }
-    /// ストリップで「ほかのウインドウ」を開いているか
-    var showsAllWindows = false
     /// ウインドウを 1 枚だけ出すときの大きさ
     var singleWindowSize: SingleWindowSize {
         didSet { singleWindowSize.save(to: defaults) }
@@ -69,6 +74,12 @@ final class StageController {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let store = StageLibraryStore(fileURL: StageLibraryStore.defaultFileURL())
     @ObservationIgnored private var refreshTimer: Timer?
+    /// ディスプレイごとの、並べたあとに枠を確かめ直す仕事（並べ直したら、前の仕事はやめる）
+    @ObservationIgnored private var placementChecks: [String: Task<Void, Never>] = [:]
+    /// 画面に出ているウインドウの一覧が変わったかを、こまめに確かめるタイマー
+    @ObservationIgnored private var windowListTimer: Timer?
+    /// 前に確かめたときに画面に出ていた、ほかのアプリのふつうのウインドウの番号（まだ確かめていなければ nil）
+    @ObservationIgnored private var onScreenNumbers: Set<Int>?
     /// ウインドウを読み直したときにすること（ストリップが一覧を覚え直す・ストリップに重なったウインドウを戻す）
     @ObservationIgnored private var refreshHandlers: [() -> Void] = []
     @ObservationIgnored private var raiseTask: Task<Void, Never>?
@@ -93,11 +104,17 @@ final class StageController {
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
+        // × で閉じた・隠したなどを、すぐ一覧に映す。閉じるときにウインドウを捨てずに隠すだけのアプリ（LINE など）は、
+        // 閉じた知らせを出さないので、画面に出ているウインドウの一覧（軽く読める）を見て、変わったときだけ読み直す
+        windowListTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshIfWindowListChanged() }
+        }
         // デスクトップを切り替えたときの読み直しは、StripManager が行う（先に、そのデスクトップのストリップを用意するため）
     }
 
     func stop() {
         refreshTimer?.invalidate()
+        windowListTimer?.invalidate()
         raiseTask?.cancel()
         saveWindowOrder()
     }
@@ -107,6 +124,17 @@ final class StageController {
     /// ウインドウを読み直したときにすることを足す
     func addRefreshHandler(_ handler: @escaping () -> Void) {
         refreshHandlers.append(handler)
+    }
+
+    /// 画面に出ているウインドウ（ほかのアプリの、ふつうのウインドウ）が変わっていたら、読み直す
+    private func refreshIfWindowListChanged() {
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let numbers = Set(WindowListEntry.onScreen().filter { $0.pid != ownPID && $0.isNormalWindow }.map(\.number))
+        guard numbers != onScreenNumbers else { return }
+        // 初めて確かめたときは覚えるだけ（起動したときに読んでいるので、読み直さなくてよい）
+        let isFirst = onScreenNumbers == nil
+        onScreenNumbers = numbers
+        if !isFirst { refresh() }
     }
 
     /// 開いているウインドウを読み直す
@@ -150,29 +178,35 @@ final class StageController {
             restoredWindowOrder = true
             let signatures = current.map { $0.signature ?? WindowSignature(bundleID: "", title: $0.title) }
             let order = WindowOrderStore.restoredOrder(saved: WindowOrderStore.load(from: defaults), current: signatures)
-            return order.map { current[$0] }
+            let restored = order.map { current[$0] }
+            return stripSettings.groupsSameApp ? RecentOrder.clustered(restored, app: \.appKey) : restored
         }
         let byID = Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return RecentOrder.syncing(windows.map(\.id), with: current.map(\.id)).compactMap { byID[$0] }
+        // 新しいウインドウは、同じアプリのウインドウのすぐ後ろに入れる（なければ末尾）。まとめる設定なら、すでに並んでいるものもまとめる
+        return RecentOrder.syncing(windows.map(\.id), with: current.map(\.id), clusters: stripSettings.groupsSameApp) { byID[$0]?.appKey }
+            .compactMap { byID[$0] }
     }
 
     /// いまのデスクトップのもの・どのディスプレイのものかを見分ける（見分け方は WindowClassifier）
     private func classify(_ items: [WindowItem]) {
-        let result = WindowClassifier.classify(
-            items,
-            showsOtherSpaces: stripSettings.showsOtherSpaces,
-            separatesDisplays: separatesDisplays
-        )
-        // 変わったときだけ入れ直す（同じ値でも入れ直すと、見ているストリップが描き直される）
+        let result = WindowClassifier.classify(items, separatesDisplays: separatesDisplays)
+        // 変わったときだけ入れ直す（同じ値でも入れ直すと、見ているウインドウバーが描き直される）
         if result.desktopNames != desktopNames { desktopNames = result.desktopNames }
         if result.windowSpaces != windowSpaces { windowSpaces = result.windowSpaces }
-        desktopSnapshot = result.activeSpace?.snapshot
-        // 見分けなかったものは、前の値のままにする
-        if let active = result.activeSpace {
-            if active.ids != currentSpaceIDs { currentSpaceIDs = active.ids }
-            if active.floating != floatingIDs { floatingIDs = active.floating }
-        }
+        desktopSnapshot = result.activeSpace.snapshot
+        if result.activeSpace.ids != currentSpaceIDs { currentSpaceIDs = result.activeSpace.ids }
+        if result.activeSpace.floating != floatingIDs { floatingIDs = result.activeSpace.floating }
+        // ディスプレイを見分けなかったとき（ウインドウバーが 1 つ）は、前の値のままにする
         if let displays = result.windowDisplays, displays != windowDisplays { windowDisplays = displays }
+        // デスクトップを切り替えた直後（1 秒）は、隠されたかを見分け直さない（行き先のウインドウを、隠されたものと取り違えないように）
+        if ProcessInfo.processInfo.systemUptime - spaceChangedAt >= 1, result.hiddenWindows != hiddenWindowIDs {
+            hiddenWindowIDs = result.hiddenWindows
+        }
+    }
+
+    /// デスクトップを切り替えた（StripManager から）
+    func noteSpaceChanged() {
+        spaceChangedAt = ProcessInfo.processInfo.systemUptime
     }
 
     /// ウインドウのあるデスクトップの名前（except のデスクトップにあるとき・分からないときは nil）
@@ -190,8 +224,9 @@ final class StageController {
             let known = Set(windows.compactMap(\.windowID))
             let new = found.filter { !known.contains($0.windowID ?? 0) }
             guard !new.isEmpty else { return }
-            // 新しく開いたものと同じく、先頭に足す（あとの読み直しで、閉じるまで残る）
-            windows = new + windows
+            // 新しく開いたものと同じく足す（同じアプリのすぐ後ろ、なければ末尾。あとの読み直しで、閉じるまで残る）
+            let byID = Dictionary((windows + new).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            windows = RecentOrder.appending(new.map(\.id), to: windows.map(\.id)) { byID[$0]?.appKey }.compactMap { byID[$0] }
             refresh()
         }
     }
@@ -208,21 +243,13 @@ final class StageController {
 
     // MARK: - ストリップに並べるウインドウ
 
-    /// そのディスプレイのストリップに並べるウインドウ（並べる数まで。「ほかのウインドウ」を開いていればすべて）
-    /// - Parameter spaceIDs: そのストリップのデスクトップで、画面に出ていたウインドウ
-    func stripWindows(on screen: NSScreen, spaceIDs: Set<AXUIElement>) -> [WindowItem] {
-        let candidates = spaceWindows(on: screen, spaceIDs: spaceIDs)
-        return showsAllWindows ? candidates : Array(candidates.prefix(stripSettings.visibleCount))
-    }
-
     /// そのディスプレイのストリップに並べる候補
-    /// - そのストリップのデスクトップのウインドウ（「ほかのデスクトップのウインドウも出す」ならすべて）。
-    ///   最小化したもの・隠したアプリのものは、どのデスクトップのストリップにも並べる
-    /// - そのディスプレイにあるウインドウ（ストリップが 1 つのとき・「ほかのディスプレイのウインドウも出す」ならすべて）
+    /// - そのウインドウバーのデスクトップのウインドウ。最小化したもの・隠したアプリのものは、どのデスクトップのウインドウバーにも並べる
+    /// - そのディスプレイにあるウインドウ（ウインドウバーが 1 つのときはすべて）
     func spaceWindows(on screen: NSScreen, spaceIDs: Set<AXUIElement>) -> [WindowItem] {
-        var result = stripSettings.showsOtherSpaces
-            ? windows
-            : windows.filter { spaceIDs.contains($0.id) || floatingIDs.contains($0.id) }
+        // 隠されたウインドウ（× で閉じて隠しただけのもの）は並べない
+        let shown = hiddenWindowIDs.isEmpty ? windows : windows.filter { !hiddenWindowIDs.contains($0.id) }
+        var result = shown.filter { spaceIDs.contains($0.id) || floatingIDs.contains($0.id) }
         if separatesDisplays {
             let key = Self.displayKey(screen)
             // どのディスプレイのものか分からないウインドウ（枠が読めないもの）は、どのストリップにも並べる
@@ -241,9 +268,9 @@ final class StageController {
         }
     }
 
-    /// ストリップごとに、そのディスプレイのウインドウだけを並べるか（ストリップが 2 つ以上あり、「ほかのディスプレイのウインドウも出す」がオフ）
+    /// ウインドウバーごとに、そのディスプレイのウインドウだけを並べるか（ウインドウバーが 2 つ以上あるとき）
     var separatesDisplays: Bool {
-        !stripSettings.showsOtherDisplays && stripScreens.count > 1
+        stripScreens.count > 1
     }
 
     /// ディスプレイの名前（ステージを分ける鍵）
@@ -285,6 +312,8 @@ final class StageController {
 
     /// ダブルクリック: そのウインドウだけを、ステージいっぱいに広げて出す（並べ方の型にかかわらず）
     func showMaximized(_ item: WindowItem, on screen: NSScreen) {
+        // 1 回目のクリックで並べたあとの確かめ直しが残っていると、広げた枠を 1 回目の枠に戻してしまうので、やめる
+        cancelPlacementCheck(on: screen)
         updateStage(on: screen, apply: false) { $0.selection.showOnly(item.id) }
         AXWindow.prepareToShow(item.id, pid: item.pid)
         AXWindow.setFrame(item.id, pid: item.pid, to: stageArea(on: screen))
@@ -298,7 +327,14 @@ final class StageController {
 
     /// ステージへドラッグ: 足す
     func add(_ item: WindowItem, on screen: NSScreen) {
-        updateStage(on: screen, apply: true) { $0.selection.add(item.id) }
+        add([item], on: screen)
+    }
+
+    /// ステージへまとめて足す（同じアプリのまとまりをドラッグしたとき。並べ直すのは 1 回だけ）
+    func add(_ items: [WindowItem], on screen: NSScreen) {
+        updateStage(on: screen, apply: true) { stage in
+            items.forEach { stage.selection.add($0.id) }
+        }
     }
 
     /// ステージから外す（ウインドウはそのまま。残りを並べ直す）
@@ -311,9 +347,6 @@ final class StageController {
         updateStage(on: screen, apply: true) { $0.layout = choice }
     }
 
-    func setGap(_ on: Bool, on screen: NSScreen) {
-        updateStage(on: screen, apply: true) { $0.hasGap = on }
-    }
 
     // MARK: - 並べて前に出す
 
@@ -328,17 +361,42 @@ final class StageController {
         for (item, frame) in placements {
             AXWindow.setFrame(item.id, pid: item.pid, to: frame)
         }
-        // しまってあったウインドウは、戻るアニメーションの間に枠を変えても効かないことがあるので、少し待って変え直す
-        if !restored.isEmpty {
-            Task {
-                try? await Task.sleep(for: .milliseconds(450))
-                for (item, frame) in placements where restored.contains(item.id) {
-                    AXWindow.setFrame(item.id, pid: item.pid, to: frame)
-                }
-            }
-        }
+        checkPlacements(placements, restored: restored, on: screen)
         // ストリップの行の並びは変えない（⌘＋クリックで続けて選ぶとき、選びたい行がずれないように）
         raise(items)
+    }
+
+    /// 並べたあと、少し待って実際の枠を読み直し、ずれていたら合わせ直す
+    ///
+    /// - しまってあったウインドウは、戻るアニメーションの間に枠を変えても効かないことがある
+    /// - Chrome・Electron のアプリなどは、頼んだ大きさを遅れて当てたり、途中で元に戻したりすることがある
+    /// 合わせ直してもずれたままのもの（アプリがそれより小さくできない・大きさを刻みでしか変えないなど）は、原因を確かめるために記録に残す
+    /// 並べたあとの確かめ直しをやめる（並べたあとに、別の枠にしたとき。ダブルクリックで広げたときなど）
+    private func cancelPlacementCheck(on screen: NSScreen) {
+        placementChecks.removeValue(forKey: Self.displayKey(screen))?.cancel()
+    }
+
+    private func checkPlacements(_ placements: [(WindowItem, CGRect)], restored: Set<AXUIElement>, on screen: NSScreen) {
+        let key = Self.displayKey(screen)
+        placementChecks[key]?.cancel()
+        placementChecks[key] = Task {
+            try? await Task.sleep(for: .milliseconds(restored.isEmpty ? 300 : 450))
+            // 利用者がウインドウをつかんで動かしている間は、合わせ直さない（動かした先を戻してしまうため）
+            guard !Task.isCancelled, NSEvent.pressedMouseButtons == 0 else { return }
+            var retried: [(WindowItem, CGRect)] = []
+            for (item, frame) in placements {
+                guard restored.contains(item.id) || !(AXWindow.frame(of: item.id).map { StageLayout.isPlaced($0, at: frame) } ?? true) else { continue }
+                AXWindow.setFrame(item.id, pid: item.pid, to: frame)
+                retried.append((item, frame))
+            }
+            guard !retried.isEmpty else { return }
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            for (item, frame) in retried {
+                guard let actual = AXWindow.frame(of: item.id), !StageLayout.isPlaced(actual, at: frame) else { continue }
+                DesktopTrace.log("並べたときのずれ", "\(item.bundleID ?? item.appName): 枠 \(frame.integral) → 実際 \(actual.integral)")
+            }
+        }
     }
 
     /// すべてのディスプレイのステージを並べ直す（ストリップの幅や出し方が変わり、ステージの範囲が変わったとき）
@@ -356,7 +414,7 @@ final class StageController {
         let visible = screen.visibleFrame
         let hasStrip = stripScreens.contains { Self.displayKey($0) == Self.displayKey(screen) }
         let frame = hasStrip
-            ? StripGeometry.stageFrame(in: visible, mode: settings.mode, edge: settings.edge, thickness: settings.effectiveThickness)
+            ? StripGeometry.stageFrame(in: visible, mode: settings.mode, edge: settings.edge, thickness: settings.effectiveThickness, gap: settings.stageGap)
             : visible
         return ScreenCoordinates.toAccessibility(frame, primaryScreenHeight: primaryHeight)
     }
@@ -393,7 +451,6 @@ final class StageController {
         return stage.layout.frames(
             count: items.count,
             in: area,
-            gap: stage.hasGap ? StageLayout.gapWidth : 0,
             customLayouts: library.customLayouts
         )
     }
@@ -434,28 +491,17 @@ final class StageController {
         refreshSoon()
     }
 
-    /// グループのアプリをまとめて終了する（確認してから。Finder は終了しない）
-    func quitApps(of group: StageGroup) {
-        let running = group.bundleIDsToQuit.flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0) }
-        guard !running.isEmpty else { return }
-        let names = running.compactMap(\.localizedName)
-        guard Confirmation.ask(
-            title: "「\(group.name)」の \(running.count) 個のアプリを終了しますか？",
-            message: names.joined(separator: "、") + "\n保存していない書類があれば、それぞれのアプリが保存するかを聞きます。",
-            action: "終了"
-        ) else { return }
-        running.forEach { $0.terminate() }
-        refreshSoon()
-    }
-
     // MARK: - ストリップのウインドウの並び順
 
     /// ストリップのウインドウを並べ替える（ドラッグ。dropIndex はその番号の行の前。並びはアプリを終了するまで残る）
     /// - Parameter visible: ストリップに並べている行（index・dropIndex は、この中での番号）。
     ///   いまのデスクトップのウインドウだけを並べているときも、ほかのデスクトップのウインドウの並びは崩さない
     func moveWindow(from index: Int, dropIndex: Int, visible: [AXUIElement]) {
-        let order = ListReorder.movedSubset(all: windows.map(\.id), visible: visible, from: index, dropIndex: dropIndex)
         let byID = Dictionary(windows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // 同じアプリをまとめているときは、ほかのアプリの間へ落としたら、同じアプリのウインドウをまとめて動かす
+        let order = stripSettings.groupsSameApp
+            ? ListReorder.movedSubset(all: windows.map(\.id), visible: visible, from: index, dropIndex: dropIndex) { byID[$0]?.appKey }
+            : ListReorder.movedSubset(all: windows.map(\.id), visible: visible, from: index, dropIndex: dropIndex)
         windows = order.compactMap { byID[$0] }
         saveWindowOrder()
     }
@@ -506,12 +552,12 @@ final class StageController {
         let remembered = group.displayID.flatMap(NSScreen.screen(withDisplayUUID:))
         guard !ids.isEmpty, let screen = remembered ?? fallback ?? NSScreen.primary else { return }
         lastRecalledGroupID = group.id
+        lastRecalledStage = (Self.displayKey(screen), Set(ids))
         // 記録した配置は、メンバーごとに枠が決まっているので、見つからなかったメンバーの枠を抜く（ほかの枠がずれないように）
         let layout = group.layout.keepingSlots(where: matches.map { $0.windowIndex != nil })
         updateStage(on: screen, apply: true) { stage in
             stage.selection.replace(with: ids)
             stage.layout = layout
-            stage.hasGap = group.hasGap
         }
     }
 

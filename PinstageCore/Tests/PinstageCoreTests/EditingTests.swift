@@ -169,32 +169,26 @@ struct StageBoardTests {
 struct GroupPreviewTests {
     @Test("用意した型は、実際と同じ形で描く")
     func builtIn() {
-        let slots = GroupPreview.slots(count: 2, layout: .builtIn(.auto), hasGap: false, customLayouts: [])
+        let slots = GroupPreview.slots(count: 2, layout: .builtIn(.auto), customLayouts: [])
         #expect(slots == [UnitRect(x: 0, y: 0, width: 0.5, height: 1), UnitRect(x: 0.5, y: 0, width: 0.5, height: 1)])
     }
 
     @Test("1 枚だけのときは、真ん中に大きめに描く")
     func single() {
-        let slots = GroupPreview.slots(count: 1, layout: .builtIn(.mainLeft), hasGap: false, customLayouts: [])
+        let slots = GroupPreview.slots(count: 1, layout: .builtIn(.mainLeft), customLayouts: [])
         #expect(slots == [GroupPreview.singleSlot])
     }
 
     @Test("登録した型は、その枠で描く。消した型は均等で描く")
     func custom() {
         let layout = CustomLayout(name: "マイ型", slots: [UnitRect(x: 0.1, y: 0.1, width: 0.5, height: 0.5)])
-        let slots = GroupPreview.slots(count: 1, layout: .custom(layout.id), hasGap: false, customLayouts: [layout])
+        let slots = GroupPreview.slots(count: 1, layout: .custom(layout.id), customLayouts: [layout])
         #expect(slots == [UnitRect(x: 0.1, y: 0.1, width: 0.5, height: 0.5)])
-        let missing = GroupPreview.slots(count: 2, layout: .custom(UUID()), hasGap: false, customLayouts: [])
+        let missing = GroupPreview.slots(count: 2, layout: .custom(UUID()), customLayouts: [])
         #expect(missing.count == 2)
         #expect(missing[0].width == 0.5)
     }
 
-    @Test("間を空けると、枠が小さくなる")
-    func gap() {
-        let slots = GroupPreview.slots(count: 2, layout: .builtIn(.auto), hasGap: true, customLayouts: [])
-        #expect(slots[0].x > 0)
-        #expect(slots[0].width < 0.5)
-    }
 }
 
 @Suite("順に切り替える")
@@ -221,11 +215,14 @@ struct WindowOrderTests {
     let b = WindowSignature(bundleID: "b", title: "B")
     let c = WindowSignature(bundleID: "c", title: "C")
 
-    @Test("覚えた順に並べ直し、当てはまらないものは先頭に置く")
+    @Test("覚えた順に並べ直し、当てはまらないものは末尾に置く")
     func restore() {
         // いまは c, a, b の順。覚えたのは b, a の順
         let order = WindowOrderStore.restoredOrder(saved: [b, a], current: [c, a, b])
-        #expect(order == [0, 2, 1])
+        #expect(order == [2, 1, 0])
+        // 当てはまらないものに、覚えた並びと同じアプリのものがあれば、そのすぐ後ろに入れる
+        let a2 = WindowSignature(bundleID: "a", title: "A の 2 つ目")
+        #expect(WindowOrderStore.restoredOrder(saved: [a, b], current: [b, a2, a]) == [2, 1, 0])
     }
 
     @Test("名前が変わっていても、同じアプリのウインドウに当てはめる")
@@ -311,3 +308,23 @@ struct SearchShortcutTests {
         #expect(ShortcutBindings.defaults.shortcut(for: .search)?.displayString == "⌃⌥Space")
     }
 }
+
+@Suite("型のひな形")
+struct LayoutTemplateTests {
+    @Test("前の 5 つは、用意した並べ方と同じ順番・同じ名前（「自動」は除く）")
+    func matchesBuiltInOrder() {
+        let builtIn = LayoutKind.allCases.filter { $0 != .auto }.map(\.title)
+        #expect(LayoutEditing.templates.prefix(builtIn.count).map(\.title) == builtIn)
+    }
+
+    @Test("形も、用意した並べ方と同じ（枠の数だけ並べたとき）")
+    func matchesBuiltInShape() {
+        let area = CGRect(x: 0, y: 0, width: 1200, height: 600)
+        let kinds: [LayoutKind] = [.columns, .rows, .quarters, .sixths, .mainLeft]
+        for (template, kind) in zip(LayoutEditing.templates, kinds) {
+            let fromTemplate = template.slots.map { $0.rect(in: area).integral }
+            #expect(fromTemplate == StageLayout.frames(count: template.slots.count, in: area, kind: kind))
+        }
+    }
+}
+

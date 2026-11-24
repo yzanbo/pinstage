@@ -2,168 +2,30 @@ import AppKit
 import PinstageCore
 import SwiftUI
 
-/// ステージの並べ方・余白と、グループとして保存・記録するボタン
-struct LayoutControls: View {
+/// 上の帯の、ステージの並べ方を選ぶボタン（押すとメニュー。用意した型・登録した型・型を作る）
+struct StripLayoutButton: View {
     let stage: StageController
     let screen: NSScreen
     let actions: AppActions
-    /// アイコンだけの細い帯で出しているか（アイコンの並びを狭めたとき）
-    let compact: Bool
-    /// 横長の帯（上下のストリップ）に並べるか
-    var horizontal = false
 
     private var current: StageBoard<AXUIElement>.Stage { stage.stage(on: screen) }
 
-    /// 余白のボタンの絵（並べ方の絵と見分けやすいもの。オンのときは色を付ける）
-    private static let gapSymbol = "rectangle.inset.filled"
-
-    /// 並べ方が、余白を自分で持っているか（登録した型・記録した配置では、「余白を空ける」を使わない）
-    private var hasOwnSpacing: Bool {
-        current.layout.hasOwnSpacing
-    }
-
     var body: some View {
-        if horizontal {
-            barControls
-        } else if compact {
-            compactControls
-        } else {
-            full
-        }
-    }
-
-    /// 横長の帯のとき: 並べ方・余白・グループとして保存・記録を、横に並べる
-    private var barControls: some View {
-        HStack(spacing: 4) {
-            layoutMenu { LayoutPill(title: stage.layoutTitle(current.layout)) }
-                .frame(width: 130)
-                .help("並べ方を選ぶ・型を作る")
-            gapButton(explainsDisabled: true)
-            saveIconButton
-            recordButton(help: "見えている画面を記録（位置・大きさ・重なりごと、新しいグループに）")
-        }
-    }
-
-    /// グループとして保存する、アイコンだけのボタン
-    private var saveIconButton: some View {
-        Button {
-            stage.saveStageAsGroup(on: screen)
-        } label: {
-            Image(systemName: "plus.square.on.square")
-        }
-        .buttonStyle(StripPrimaryButtonStyle())
-        .frame(width: 40)
-        .disabled(current.selection.isEmpty)
-        .help("グループとして保存")
-    }
-
-    /// アイコンだけのとき: 並べ方のメニュー・余白・グループとして保存を、アイコンのボタンで縦に並べる
-    private var compactControls: some View {
-        VStack(spacing: 4) {
-            Divider().padding(.horizontal, 6)
-            layoutMenu { StripIconLabel(systemName: "rectangle.split.3x1") }
-                .fixedSize()
-                .help("並べ方: \(stage.layoutTitle(current.layout))")
-
-            gapButton(explainsDisabled: false)
-
-            saveIconButton
-
-            recordButton(help: "見えている画面を記録（位置・大きさ・重なりごと、新しいグループに）")
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var full: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "ステージ", count: current.selection.members.count)
-            HStack(spacing: 4) {
-                // 並べ方（押すとメニュー）
-                layoutMenu { LayoutPill(title: stage.layoutTitle(current.layout)) }
-                    .help("並べ方を選ぶ・型を作る")
-                gapButton(explainsDisabled: true)
-            }
-
-            HStack(spacing: 4) {
-                Button {
-                    stage.saveStageAsGroup(on: screen)
-                } label: {
-                    // 幅が狭いときは短く
-                    ViewThatFits(in: .horizontal) {
-                        Label("グループとして保存", systemImage: "plus.square.on.square")
-                        Label("グループに保存", systemImage: "plus.square.on.square")
-                        Label("保存", systemImage: "plus.square.on.square")
-                    }
-                    .lineLimit(1)
-                }
-                .buttonStyle(StripPrimaryButtonStyle())
-                .disabled(current.selection.isEmpty)
-                recordButton(help: "見えている画面を記録: このディスプレイに見えているウインドウを、位置・大きさ・重なりの順番ごと、新しいグループにします")
-            }
-            .help(current.selection.isEmpty ? "ステージに出しているウインドウを、グループとして保存します（いまは空です）" : "ステージに出しているウインドウを、グループとして保存します")
-        }
-    }
-
-    /// 並べ方のメニュー（label を押すと出る）
-    private func layoutMenu(@ViewBuilder label: () -> some View) -> some View {
         Menu {
             menuItems
         } label: {
-            label()
+            StripIconLabel(systemName: "rectangle.split.3x1")
         }
         .stripMenuButton()
-    }
-
-    /// 余白を空けるボタン。explainsDisabled なら、押せないとき（並べ方が余白を自分で持っているとき）に薄くして、理由を出す
-    private func gapButton(explainsDisabled: Bool) -> some View {
-        let explains = explainsDisabled && hasOwnSpacing
-        return Button {
-            stage.setGap(!current.hasGap, on: screen)
-        } label: {
-            StripIconLabel(systemName: Self.gapSymbol, isActive: current.hasGap)
-        }
-        .buttonStyle(.plain)
-        .disabled(hasOwnSpacing)
-        .opacity(explains ? 0.4 : 1)
-        .help(explains ? "登録した型では、型の余白をそのまま使います" : (current.hasGap ? "余白を空ける（オン）" : "余白を空ける（オフ）"))
-    }
-
-    /// 見えている画面を、位置・大きさ・重なりごとグループとして記録するボタン
-    private func recordButton(help: String) -> some View {
-        Button {
-            stage.recordScreenAsGroup(on: screen)
-        } label: {
-            StripIconLabel(systemName: "camera.viewfinder")
-        }
-        .buttonStyle(.plain)
-        .help(help)
+        .fixedSize()
+        .help("並べ方: \(stage.layoutTitle(current.layout))")
     }
 
     /// 並べ方のメニューの中身（用意した型・登録した型・型を作る）
     @ViewBuilder
     private var menuItems: some View {
-        Section("用意した型") {
-            ForEach(LayoutKind.allCases) { kind in
-                Toggle(kind.title, isOn: Binding(
-                    get: { current.layout == .builtIn(kind) },
-                    set: { _ in stage.setLayout(.builtIn(kind), on: screen) }
-                ))
-            }
-        }
-        if !stage.library.customLayouts.isEmpty {
-            Section("登録した型") {
-                ForEach(stage.library.customLayouts) { custom in
-                    Toggle(custom.name, isOn: Binding(
-                        get: { current.layout == .custom(custom.id) },
-                        set: { _ in stage.setLayout(.custom(custom.id), on: screen) }
-                    ))
-                }
-            }
-        }
-        // 記録したグループを呼び出したときは、その配置を選んだ印を出す（ほかの型を選ぶと、そちらに変わる）
-        if case .recorded = current.layout {
-            Divider()
-            Toggle(LayoutChoice.recordedTitle, isOn: .constant(true))
+        LayoutChoiceItems(current: current.layout, customLayouts: stage.library.customLayouts) { choice in
+            stage.setLayout(choice, on: screen)
         }
         Divider()
         Button("いまの並びを型として登録") { stage.registerCurrentArrangement(on: screen) }
@@ -175,28 +37,60 @@ struct LayoutControls: View {
     }
 }
 
-/// 並べ方を選ぶ欄の中身（いまの並べ方の名前と ▾）
-private struct LayoutPill: View {
-    let title: String
-    @State private var isHovering = false
+/// 型の一覧（用意した型・登録した型。記録した配置を選んでいるときは、その印も）。
+/// 上の帯の並べ方のメニューと、グループの右クリックの「並べ方」で使う
+struct LayoutChoiceItems: View {
+    /// いま選んでいる並べ方（印を付ける）
+    let current: LayoutChoice
+    let customLayouts: [CustomLayout]
+    /// 型を選んだ
+    let select: (LayoutChoice) -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) {
-                    Image(systemName: "rectangle.split.3x1")
-                    Text(title).lineLimit(1)
-                }
-                // 狭いときは絵を省き、名前は途中で切る
-                Text(title).lineLimit(1).truncationMode(.tail)
+        Section("用意した型") {
+            ForEach(LayoutKind.allCases) { kind in
+                toggle(kind.title, choice: .builtIn(kind))
             }
-            Spacer(minLength: 2)
-            Image(systemName: "chevron.up.chevron.down")
-                .font(.system(size: 9, weight: .semibold))
         }
-        .font(.system(size: 12))
-        .foregroundStyle(.primary.opacity(0.85))
-        .stripPill(isHovering: isHovering)
-        .onHover { isHovering = $0 }
+        if !customLayouts.isEmpty {
+            Section("登録した型") {
+                ForEach(customLayouts) { custom in
+                    toggle(custom.name, choice: .custom(custom.id))
+                }
+            }
+        }
+        // 記録した配置を選んでいるときは、その印を出す（ほかの型を選ぶと、そちらに変わる）
+        if case .recorded = current {
+            Divider()
+            Toggle(LayoutChoice.recordedTitle, isOn: .constant(true))
+        }
+    }
+
+    private func toggle(_ title: String, choice: LayoutChoice) -> some View {
+        Toggle(title, isOn: Binding(
+            get: { current == choice },
+            set: { _ in select(choice) }
+        ))
+    }
+}
+
+/// グループを作るボタン（「グループ」の見出しの右の ＋。押すと、ステージを保存するか、見えている画面を記録するかを選ぶ）
+struct GroupAddButton: View {
+    let stage: StageController
+    let screen: NSScreen
+
+    private var isStageEmpty: Bool { stage.stage(on: screen).selection.isEmpty }
+
+    var body: some View {
+        Menu {
+            Button("ステージをグループとして保存") { stage.saveStageAsGroup(on: screen) }
+                .disabled(isStageEmpty)
+            Button("見えている画面を記録") { stage.recordScreenAsGroup(on: screen) }
+        } label: {
+            StripIconLabel(systemName: "plus")
+        }
+        .stripMenuButton()
+        .fixedSize()
+        .help("グループを作る: ステージのウインドウを保存するか、見えている画面を位置・大きさ・重なりごと記録します")
     }
 }

@@ -28,8 +28,12 @@ public enum StripGeometry {
     /// ストリップの幅の範囲（pt）。アイコンの並びは、これより狭く、1 列になる幅まで狭められる（StripSettings.widthRange）
     public static let widthRange: ClosedRange<CGFloat> = 160...480
 
-    /// ストリップと画面の端との間、ストリップとステージとの間（pt）。ストリップの長さは、使える範囲の端から端までいっぱいに使う
-    public static let margin: CGFloat = 8
+    /// ウインドウバーと画面の端との間（pt）。空けない（画面の端にぴったり付ける）。ウインドウバーの長さは、使える範囲の端から端までいっぱいに使う
+    public static let edgeMargin: CGFloat = 0
+    /// ウインドウバーとステージとの間の初期設定（pt）。並べたウインドウが、ウインドウバーにくっつかないように空ける（設定で変えられる。StripSettings.stageGap）
+    public static let stageGap: CGFloat = 8
+    /// ウインドウバーとステージとの間の範囲（pt）
+    public static let stageGapRange: ClosedRange<CGFloat> = 0...24
     /// 画面の端からこの距離（pt）までポインタが来たら、隠したストリップを出す
     public static let revealDistance: CGFloat = 2
     /// 出したストリップから、この距離（pt）より離れたら隠す
@@ -49,7 +53,7 @@ public enum StripGeometry {
     /// 内側の縁をドラッグしているときの幅（ポインタの x から。左右のストリップだけ）。範囲の中に収め、画面の半分より広くしない
     /// - Parameter range: 幅の範囲（形式で変わる。StripSettings.widthRange）
     public static func width(forPointerX x: CGFloat, in visibleFrame: CGRect, edge: StripEdge, range: ClosedRange<CGFloat> = widthRange) -> CGFloat {
-        let raw = edge == .right ? visibleFrame.maxX - margin - x : x - visibleFrame.minX - margin
+        let raw = edge == .right ? visibleFrame.maxX - edgeMargin - x : x - visibleFrame.minX - edgeMargin
         let width = min(max(raw, range.lowerBound), range.upperBound)
         return min(width, max(range.lowerBound, visibleFrame.width / 2))
     }
@@ -57,21 +61,22 @@ public enum StripGeometry {
     /// 出しているときのストリップの枠（その辺から間を空けて、厚みの分）
     public static func shownFrame(in visibleFrame: CGRect, edge: StripEdge, thickness: CGFloat) -> CGRect {
         visibleFrame
-            .divided(atDistance: margin, from: edge.rectEdge).remainder
+            .divided(atDistance: edgeMargin, from: edge.rectEdge).remainder
             .divided(atDistance: thickness, from: edge.rectEdge).slice
     }
 
-    /// 隠しているときのストリップの枠（その辺の外へ出す）
+    /// 隠しているときのストリップの枠（その辺の外へ出す。画面の端と重ならないよう、1pt 余分に出す）
     public static func hiddenFrame(in visibleFrame: CGRect, edge: StripEdge, thickness: CGFloat) -> CGRect {
-        let distance = thickness + margin * 2
+        let distance = thickness + edgeMargin + 1
         return shownFrame(in: visibleFrame, edge: edge, thickness: thickness)
             .offsetBy(dx: edge.outward.dx * distance, dy: edge.outward.dy * distance)
     }
 
-    /// ウインドウを並べる範囲（ステージ）。常に出すときは、ストリップと、その両側の間を除く
-    public static func stageFrame(in visibleFrame: CGRect, mode: StripMode, edge: StripEdge, thickness: CGFloat) -> CGRect {
+    /// ウインドウをステージ（ステージ）。常に出すときは、ストリップと、その両側の間を除く
+    /// - Parameter gap: ウインドウバーとステージとの間（StripSettings.stageGap）
+    public static func stageFrame(in visibleFrame: CGRect, mode: StripMode, edge: StripEdge, thickness: CGFloat, gap: CGFloat = stageGap) -> CGRect {
         guard mode == .alwaysShown else { return visibleFrame }
-        return visibleFrame.divided(atDistance: margin + thickness + margin, from: edge.rectEdge).remainder
+        return visibleFrame.divided(atDistance: edgeMargin + thickness + gap, from: edge.rectEdge).remainder
     }
 
     /// 隠したストリップを出すか（ポインタが、そのディスプレイの、ストリップのある端に来た）。

@@ -3,35 +3,41 @@ import CoreGraphics
 
 /// ステージに並べるときの形（型）
 public enum LayoutKind: String, CaseIterable, Codable, Sendable, Identifiable {
-    /// 均等に並べる（2〜3 枚は横に、4 枚からは格子に）
+    /// 枚数に合わせる（3 枚までは左右に、4 枚からは格子に。最後の行が埋まらなければ、その行を広げる）
     case auto
+    /// 左右に、同じ幅で並べる
+    case columns
+    /// 上下に、同じ高さで並べる
+    case rows
+    /// 2×2 に分ける（少ないときは空いた枠を空けておき、多いときは、はみ出した分を最後の枠に重ねる）
+    case quarters
+    /// 3×2 に分ける（決まりは 4 分割と同じ）
+    case sixths
     /// 1 枚目を左に大きく、残りを右に縦に積む
     case mainLeft
-    /// 上下に積む
-    case rows
-    /// 少しずつずらして重ねる
-    case cascade
 
     public var id: String { rawValue }
 
     /// メニューに出す名前
     public var title: String {
         switch self {
-        case .auto: "自動（均等）"
-        case .mainLeft: "左を大きく"
+        case .auto: "自動（枚数に合わせる）"
+        case .columns: "左右に並べる"
         case .rows: "上下に並べる"
-        case .cascade: "重ねる"
+        case .quarters: "4 分割"
+        case .sixths: "6 分割"
+        case .mainLeft: "左を大きく"
         }
     }
 
-    /// 1 枚だけ出すときも、型に合わせて大きさを変えるか。
-    /// 均等などは 1 枚だと画面いっぱいになってしまうので、大きさはそのままにして前に出すだけにする
-    public var resizesSingleWindow: Bool {
-        self == .cascade
+    /// 保存した値から読む。なくした型（「重ねる」）と知らない値は「自動」として読む（グループを読めなくしないため）
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = LayoutKind(rawValue: raw) ?? .auto
     }
 }
 
-/// ウインドウを 1 枚だけ出すときの大きさ（用意した型のうち「重ねる」以外のとき）
+/// ウインドウを 1 枚だけ出すときの大きさ（用意した型のとき）
 public enum SingleWindowSize: String, CaseIterable, Codable, Sendable, Identifiable {
     /// 大きさを変えない（ストリップと重なるところだけ中へ入れる）
     case keep
@@ -67,11 +73,9 @@ public enum SingleWindowSize: String, CaseIterable, Codable, Sendable, Identifia
 /// 座標は左上が原点で、下へ行くほど y が大きい（アクセシビリティの API と同じ向き）。
 /// 返す配列の順番は、ステージに出す順番（後ろほど前面）と同じ。
 public enum StageLayout {
-    /// 「余白を空ける」のときの、間の幅（pt）
-    public static let gapWidth: CGFloat = 16
-    /// 「重ねる」のときの、1 枚の大きさ（ステージに対する割合）
+    /// 重ねて置くときの、1 枚の大きさ（ステージに対する割合）。登録した型の枠より多いウインドウを置くのに使う
     static let cascadeScale: CGFloat = 0.7
-    /// 「重ねる」のときの、ずらす量の上限（pt）
+    /// 重ねて置くときの、ずらす量の上限（pt）
     static let cascadeMaxStep: CGFloat = 48
     /// 「左を大きく」のときの、左の 1 枚の幅（ステージに対する割合）
     static let mainLeftRatio: CGFloat = 0.6
@@ -80,20 +84,17 @@ public enum StageLayout {
     ///   - count: 並べるウインドウの数
     ///   - area: ステージの範囲
     ///   - kind: 並べ方の形
-    ///   - gap: ウインドウ同士の間と、ステージの端との間（0 ならぴったり）
-    public static func frames(count: Int, in area: CGRect, kind: LayoutKind, gap: CGFloat = 0) -> [CGRect] {
+    public static func frames(count: Int, in area: CGRect, kind: LayoutKind) -> [CGRect] {
         guard count > 0, area.width > 0, area.height > 0 else { return [] }
-        // ステージの端を gap/2 だけ内側にし、各枠も gap/2 ずつ内側にすると、間も端も gap になる
-        let half = max(0, gap) / 2
-        let inner = area.insetBy(dx: half, dy: half)
-        let cells: [CGRect]
-        switch kind {
-        case .auto: cells = grid(count: count, in: inner)
-        case .mainLeft: cells = mainLeft(count: count, in: inner)
-        case .rows: cells = split(inner, into: count, horizontally: false)
-        case .cascade: return cascade(count: count, in: area.insetBy(dx: max(0, gap), dy: max(0, gap)))
+        let cells = switch kind {
+        case .auto: grid(count: count, in: area)
+        case .columns: split(area, into: count, horizontally: true)
+        case .rows: split(area, into: count, horizontally: false)
+        case .quarters: fixedGrid(count: count, columns: 2, rows: 2, in: area)
+        case .sixths: fixedGrid(count: count, columns: 3, rows: 2, in: area)
+        case .mainLeft: mainLeft(count: count, in: area)
         }
-        return cells.map { $0.insetBy(dx: half, dy: half).integral }
+        return cells.map(\.integral)
     }
 
     /// 均等: 3 枚までは横に並べ、4 枚からは格子にする（列の数は √n を切り上げ）
@@ -120,6 +121,22 @@ public enum StageLayout {
         }
     }
 
+    /// 決まった数の枠（左上から右へ、上から下へ）。少ないときは残りの枠を空けておき、多いときは、はみ出した分を最後の枠に重ねる
+    private static func fixedGrid(count: Int, columns: Int, rows: Int, in area: CGRect) -> [CGRect] {
+        let width = area.width / CGFloat(columns)
+        let height = area.height / CGFloat(rows)
+        let last = columns * rows - 1
+        return (0..<count).map { index in
+            let cell = min(index, last)
+            return CGRect(
+                x: area.minX + CGFloat(cell % columns) * width,
+                y: area.minY + CGFloat(cell / columns) * height,
+                width: width,
+                height: height
+            )
+        }
+    }
+
     /// 左を大きく: 1 枚目を左に、残りを右に縦に積む
     private static func mainLeft(count: Int, in area: CGRect) -> [CGRect] {
         guard count > 1 else { return [area] }
@@ -129,8 +146,8 @@ public enum StageLayout {
         return [left] + split(right, into: count - 1, horizontally: false)
     }
 
-    /// 重ねる: 同じ大きさの枠を、左上から右下へ少しずつずらす
-    private static func cascade(count: Int, in area: CGRect) -> [CGRect] {
+    /// 重ねて置く: 同じ大きさの枠を、左上から右下へ少しずつずらす（登録した型の枠より多いウインドウを置くのに使う）
+    static func cascade(count: Int, in area: CGRect) -> [CGRect] {
         let size = CGSize(width: area.width * cascadeScale, height: area.height * cascadeScale)
         guard count > 1 else {
             // 1 枚なら真ん中に置く
@@ -161,6 +178,12 @@ public enum StageLayout {
                 return CGRect(x: area.minX, y: area.minY + height * CGFloat(index), width: area.width, height: height)
             }
         }
+    }
+
+    /// 並べたウインドウが、決めた枠のとおりになっているか（アプリが大きさを丸めることがあるので、少しのずれは気にしない）
+    public static func isPlaced(_ actual: CGRect, at target: CGRect, tolerance: CGFloat = 2) -> Bool {
+        abs(actual.minX - target.minX) <= tolerance && abs(actual.minY - target.minY) <= tolerance
+            && abs(actual.maxX - target.maxX) <= tolerance && abs(actual.maxY - target.maxY) <= tolerance
     }
 
     /// 1 枚だけ前に出すときの枠

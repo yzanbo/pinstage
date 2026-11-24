@@ -49,23 +49,65 @@ struct StageLayoutTests {
         ])
     }
 
-    @Test("重ねる: 同じ大きさで少しずつずれ、範囲からはみ出さない")
+    @Test("決めた枠のとおりか（2pt までのずれは気にしない）")
+    func placed() {
+        let target = CGRect(x: 100, y: 0, width: 600, height: 400)
+        #expect(StageLayout.isPlaced(target, at: target))
+        #expect(StageLayout.isPlaced(CGRect(x: 101, y: 0, width: 598, height: 401), at: target))
+        // アプリが小さくできず、となりへはみ出した
+        #expect(!StageLayout.isPlaced(CGRect(x: 100, y: 0, width: 680, height: 400), at: target))
+        // 遅れて元の位置に戻った
+        #expect(!StageLayout.isPlaced(CGRect(x: 300, y: 50, width: 600, height: 400), at: target))
+    }
+
+    @Test("左右に並べる")
+    func columns() {
+        let frames = StageLayout.frames(count: 2, in: area, kind: .columns)
+        #expect(frames == [
+            CGRect(x: 100, y: 0, width: 600, height: 800),
+            CGRect(x: 700, y: 0, width: 600, height: 800),
+        ])
+    }
+
+    @Test("4 分割・6 分割: 決まった数の枠。少ないときは残りを空け、多いときは最後の枠に重ねる")
+    func fixedGrids() {
+        let quarters = StageLayout.frames(count: 3, in: area, kind: .quarters)
+        #expect(quarters == [
+            CGRect(x: 100, y: 0, width: 600, height: 400),
+            CGRect(x: 700, y: 0, width: 600, height: 400),
+            CGRect(x: 100, y: 400, width: 600, height: 400),
+        ])
+        // 6 枚を 4 分割に並べると、5・6 枚目は 4 つ目の枠に重なる
+        let overflow = StageLayout.frames(count: 6, in: area, kind: .quarters)
+        #expect(overflow[4] == overflow[3] && overflow[5] == overflow[3])
+        let sixths = StageLayout.frames(count: 6, in: area, kind: .sixths)
+        #expect(sixths[0] == CGRect(x: 100, y: 0, width: 400, height: 400))
+        #expect(sixths[2] == CGRect(x: 900, y: 0, width: 400, height: 400))
+        #expect(sixths[5] == CGRect(x: 900, y: 400, width: 400, height: 400))
+        // 2 枚でも、6 分割の枠の大きさのまま
+        #expect(StageLayout.frames(count: 2, in: area, kind: .sixths)[1] == CGRect(x: 500, y: 0, width: 400, height: 400))
+    }
+
+    @Test("なくした型（重ねる）と知らない値は、「自動」として読む")
+    func legacyKinds() throws {
+        let decoder = JSONDecoder()
+        #expect(try decoder.decode(LayoutKind.self, from: Data("\"cascade\"".utf8)) == .auto)
+        #expect(try decoder.decode(LayoutKind.self, from: Data("\"unknown\"".utf8)) == .auto)
+        #expect(try decoder.decode(LayoutKind.self, from: Data("\"sixths\"".utf8)) == .sixths)
+        // グループの中に書かれていても、グループごと読める
+        let group = try JSONEncoder().encode(LayoutChoice.builtIn(.rows))
+        let legacy = Data(String(decoding: group, as: UTF8.self).replacingOccurrences(of: "rows", with: "cascade").utf8)
+        #expect(try decoder.decode(LayoutChoice.self, from: legacy) == .builtIn(.auto))
+    }
+
+    @Test("重ねて置く（登録した型の枠より多いウインドウ）: 同じ大きさで少しずつずれ、範囲からはみ出さない")
     func cascade() {
-        let frames = StageLayout.frames(count: 3, in: area, kind: .cascade)
+        let frames = StageLayout.cascade(count: 3, in: area)
         #expect(frames.count == 3)
         #expect(frames.allSatisfy { $0.size == frames[0].size })
         #expect(frames[1].minX > frames[0].minX)
         #expect(frames[1].minY > frames[0].minY)
         #expect(frames.allSatisfy { area.contains($0) })
-    }
-
-    @Test("間を空けると、ウインドウ同士の間も端との間も同じになる")
-    func gap() {
-        let frames = StageLayout.frames(count: 2, in: area, kind: .auto, gap: 20)
-        #expect(frames[0].minX == area.minX + 20)
-        #expect(frames[1].minX - frames[0].maxX == 20)
-        #expect(area.maxX - frames[1].maxX == 20)
-        #expect(frames[0].minY == 20)
     }
 
     @Test("0 枚なら何も返さない")

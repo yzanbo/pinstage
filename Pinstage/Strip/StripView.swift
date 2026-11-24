@@ -37,7 +37,7 @@ struct StripView: View {
     /// 左右に出したとき: 上から、帯・案内・ウインドウ・グループ・並べ方を縦に並べる
     private var column: some View {
         VStack(alignment: .leading, spacing: StripStyle.sectionSpacing) {
-            StripToolbar(stage: stage, shortcuts: shortcuts, actions: actions, compact: isIconOnly)
+            StripToolbar(stage: stage, shortcuts: shortcuts, actions: actions, screen: strip.screen, compact: isIconOnly)
             if !stage.isTrusted {
                 StripNotice.permission(compact: isIconOnly)
             }
@@ -46,7 +46,6 @@ struct StripView: View {
             }
             WindowSection(stage: stage, thumbnails: thumbnails, strip: strip)
             GroupSection(stage: stage, shortcuts: shortcuts, strip: strip, actions: actions)
-            LayoutControls(stage: stage, screen: strip.screen, actions: actions, compact: isIconOnly)
         }
         .padding(.horizontal, isIconOnly ? 6 : 10)
         .padding(.vertical, isIconOnly ? 8 : 10)
@@ -56,7 +55,7 @@ struct StripView: View {
     /// 上下に出したとき: 左から、帯・案内・ウインドウ・グループ・並べ方を横に並べる（案内は、アイコンのボタンにする）
     private var bar: some View {
         HStack(spacing: 8) {
-            StripToolbar(stage: stage, shortcuts: shortcuts, actions: actions, compact: false, horizontal: true)
+            StripToolbar(stage: stage, shortcuts: shortcuts, actions: actions, screen: strip.screen, compact: false, horizontal: true)
             if !stage.isTrusted {
                 StripNotice.permission(compact: true).fixedSize()
             }
@@ -66,8 +65,6 @@ struct StripView: View {
             BarDivider()
             WindowSection(stage: stage, thumbnails: thumbnails, strip: strip)
             GroupSection(stage: stage, shortcuts: shortcuts, strip: strip, actions: actions)
-            BarDivider()
-            LayoutControls(stage: stage, screen: strip.screen, actions: actions, compact: false, horizontal: true)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, StripRowSizing.barPadding)

@@ -26,6 +26,11 @@ struct WindowItem: Identifiable, Equatable {
     }
 
     /// 再起動のあとも見つけるための手がかり（識別名のないアプリは覚えられない）
+    /// どのアプリのウインドウか（同じアプリのウインドウを、ウインドウバーでとなりに並べる・つないで見せるのに使う）
+    var appKey: String {
+        bundleID ?? "pid:\(pid)"
+    }
+
     var signature: WindowSignature? {
         bundleID.map { WindowSignature(bundleID: $0, title: title) }
     }

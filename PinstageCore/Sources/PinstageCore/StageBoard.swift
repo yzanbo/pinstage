@@ -7,7 +7,6 @@ public struct StageBoard<ID: Hashable>: Equatable {
     public struct Stage: Equatable {
         public var selection = StageSelection<ID>()
         public var layout: LayoutChoice = .builtIn(.auto)
-        public var hasGap = false
 
         public init() {}
     }

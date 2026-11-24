@@ -73,6 +73,57 @@ public enum ListReorder {
         return result
     }
 
+    /// 同じアプリをまとめているときの並べ替え（movedSubset と同じ引数）
+    ///
+    /// - 同じアプリのウインドウのとなりに落としたら、そのウインドウだけを動かす（アプリの中の順番を変える）
+    /// - ほかのアプリの間に落としたら、同じアプリのウインドウをまとめて、その位置へ動かす
+    /// 動かしたあとも、同じアプリはまとまったまま（RecentOrder.clustered）
+    public static func movedSubset<ID: Equatable>(all: [ID], visible: [ID], from: Int, dropIndex: Int, clusteringBy app: (ID) -> String?) -> [ID] {
+        guard visible.indices.contains(from), (0...visible.count).contains(dropIndex),
+              !isNoOp(from: from, dropIndex: dropIndex)
+        else { return all }
+        let moving = visible[from]
+        let key = app(moving)
+        let next = dropIndex < visible.count ? visible[dropIndex] : nil
+        let previous = dropIndex > 0 ? visible[dropIndex - 1] : nil
+        let staysInApp = key != nil && (next.map(app) == key || previous.map(app) == key)
+        if staysInApp {
+            return RecentOrder.clustered(movedSubset(all: all, visible: visible, from: from, dropIndex: dropIndex), app: app)
+        }
+        // 同じアプリのウインドウをまとめて動かす（分からないものは、そのウインドウだけ）
+        let block = key.map { key in all.filter { app($0) == key } } ?? [moving]
+        var rest = all.filter { item in !block.contains(item) }
+        if let next, let anchor = rest.firstIndex(of: next) {
+            rest.insert(contentsOf: block, at: anchor)
+        } else if let last = visible.last(where: { item in !block.contains(item) }), let anchor = rest.firstIndex(of: last) {
+            rest.insert(contentsOf: block, at: anchor + 1)
+        } else {
+            return all
+        }
+        return RecentOrder.clustered(rest, app: app)
+    }
+
+    /// その行を含む、となり合った同じ鍵（アプリ）の行の範囲（2 つ以上つながっているときだけ。1 つだけなら nil）
+    public static func cluster<Key: Equatable>(at index: Int, keys: [Key]) -> ClosedRange<Int>? {
+        guard keys.indices.contains(index) else { return nil }
+        let key = keys[index]
+        var first = index, last = index
+        while first > 0, keys[first - 1] == key { first -= 1 }
+        while last + 1 < keys.count, keys[last + 1] == key { last += 1 }
+        return first < last ? first...last : nil
+    }
+
+    /// 同じアプリをまとめているときに、その位置（その番号の行の前）に落とせるか。
+    ///
+    /// まとまりはまとめて動かすので、自分のまとまりの中・すぐ前後（動かない位置）と、
+    /// ほかのアプリのまとまりの中（同じ鍵の 2 つの行の間）には落とせない
+    /// - Parameter cluster: ドラッグしている行のまとまり（1 つだけの行なら nil）
+    public static func canDrop<Key: Equatable>(at drop: Int, keys: [Key], cluster: ClosedRange<Int>?) -> Bool {
+        if let cluster, (cluster.lowerBound...(cluster.upperBound + 1)).contains(drop) { return false }
+        guard drop > 0, drop < keys.count else { return true }
+        return keys[drop - 1] != keys[drop]
+    }
+
     /// 落としても並びが変わらない位置か（自分の前・自分のすぐ後ろ）
     public static func isNoOp(from: Int, dropIndex: Int) -> Bool {
         dropIndex == from || dropIndex == from + 1

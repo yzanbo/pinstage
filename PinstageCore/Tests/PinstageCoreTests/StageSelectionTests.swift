@@ -43,10 +43,95 @@ struct StageSelectionTests {
 
 @Suite("ストリップの並び")
 struct RecentOrderTests {
-    @Test("新しいものは先頭に足し、なくなったものは除く")
+    @Test("新しいものは末尾に足し、なくなったものは除く")
     func syncing() {
-        #expect(RecentOrder.syncing([1, 2, 3], with: [3, 4, 1]) == [4, 1, 3])
+        #expect(RecentOrder.syncing([1, 2, 3], with: [3, 4, 1]) == [1, 3, 4])
     }
+
+    @Test("新しいものは、同じアプリのウインドウの最後のすぐ後ろに入れる（なければ末尾）")
+    func groupsSameApp() {
+        // 1・3 は A、2 は B、4・5 は新しい A と C
+        let apps = [1: "A", 2: "B", 3: "A", 4: "A", 5: "C"]
+        let synced = RecentOrder.syncing([1, 2, 3], with: [5, 4, 3, 2, 1]) { apps[$0] }
+        #expect(synced == [1, 2, 3, 4, 5])
+        // A が離れて並んでいる（利用者が離した）ときは、最後の A の後ろに入れ、ほかは動かさない
+        let apart = RecentOrder.syncing([1, 2, 3], with: [1, 2, 3, 4]) { apps[$0] }
+        #expect(apart == [1, 2, 3, 4])
+        let middle = RecentOrder.syncing([1, 2], with: [1, 2, 4]) { apps[$0] }
+        #expect(middle == [1, 4, 2])
+        // アプリが分からないものは末尾
+        #expect(RecentOrder.syncing([1, 2], with: [1, 2, 9]) { apps[$0] } == [1, 2, 9])
+    }
+
+    @Test("同じアプリをまとめるときは、すでに並んでいるものも、最初に出てくる位置にまとめる")
+    func clusters() {
+        // A1, B, C, A2 → A1, A2, B, C（アプリどうしの順番・アプリの中の順番は変えない）
+        let apps = ["a1": "A", "b": "B", "c": "C", "a2": "A", "x": nil] as [String: String?]
+        let app: (String) -> String? = { apps[$0] ?? nil }
+        #expect(RecentOrder.clustered(["a1", "b", "c", "a2"], app: app) == ["a1", "a2", "b", "c"])
+        // アプリが分からないものは、その位置のまま
+        #expect(RecentOrder.clustered(["x", "a1", "b", "a2"], app: app) == ["x", "a1", "a2", "b"])
+        // 読み直すたびにまとめる（オフなら、そのまま）
+        #expect(RecentOrder.syncing(["a1", "b", "a2"], with: ["a1", "b", "a2"], clusters: true, app: app) == ["a1", "a2", "b"])
+        #expect(RecentOrder.syncing(["a1", "b", "a2"], with: ["a1", "b", "a2"], clusters: false, app: app) == ["a1", "b", "a2"])
+    }
+
+    @Test("同じアプリをまとめるときのドラッグ: ほかのアプリの間へはまとめて動かし、同じアプリの中では順番を変える")
+    func movesCluster() {
+        let apps = ["a1": "A", "a2": "A", "b": "B", "c": "C"]
+        let app: (String) -> String? = { apps[$0] }
+        let all = ["a1", "a2", "b", "c"]
+        // a2 を c の後ろへ → A がまとめて c の後ろへ
+        #expect(ListReorder.movedSubset(all: all, visible: all, from: 1, dropIndex: 4, clusteringBy: app) == ["b", "c", "a1", "a2"])
+        // a1 を b と c の間へ → A がまとめて動く
+        #expect(ListReorder.movedSubset(all: all, visible: all, from: 0, dropIndex: 3, clusteringBy: app) == ["b", "a1", "a2", "c"])
+        // a2 を a1 の前へ → A の中で入れ替わる
+        #expect(ListReorder.movedSubset(all: all, visible: all, from: 1, dropIndex: 0, clusteringBy: app) == ["a2", "a1", "b", "c"])
+        // c を先頭へ → c だけ動く
+        #expect(ListReorder.movedSubset(all: all, visible: all, from: 3, dropIndex: 0, clusteringBy: app) == ["c", "a1", "a2", "b"])
+        // 動かないところに落としたら、そのまま
+        #expect(ListReorder.movedSubset(all: all, visible: all, from: 2, dropIndex: 3, clusteringBy: app) == all)
+    }
+
+    @Test("となり合った同じアプリの行の範囲（1 つだけなら nil）")
+    func clusterRange() {
+        let keys = ["A", "A", "B", "C", "C", "C"]
+        #expect(ListReorder.cluster(at: 0, keys: keys) == 0...1)
+        #expect(ListReorder.cluster(at: 1, keys: keys) == 0...1)
+        #expect(ListReorder.cluster(at: 2, keys: keys) == nil)
+        #expect(ListReorder.cluster(at: 4, keys: keys) == 3...5)
+        #expect(ListReorder.cluster(at: 9, keys: keys) == nil)
+    }
+
+    @Test("まとめているときに落とせる位置: 自分のまとまりの中・すぐ前後と、ほかのアプリのまとまりの中には落とせない")
+    func clusterDrops() {
+        let keys = ["A", "A", "B", "C", "C"]
+        // A のまとまり（0...1）をドラッグしているとき
+        for drop in 0...2 { #expect(!ListReorder.canDrop(at: drop, keys: keys, cluster: 0...1)) }
+        // B と C の間・末尾には落とせる。C のまとまりの中（4 の前）には落とせない
+        #expect(ListReorder.canDrop(at: 3, keys: keys, cluster: 0...1))
+        #expect(!ListReorder.canDrop(at: 4, keys: keys, cluster: 0...1))
+        #expect(ListReorder.canDrop(at: 5, keys: keys, cluster: 0...1))
+        // 1 つだけの B（まとまりなし）は、A の中・C の中には落とせず、先頭・末尾・まとまりの境目には落とせる
+        #expect(ListReorder.canDrop(at: 0, keys: keys, cluster: nil))
+        #expect(!ListReorder.canDrop(at: 1, keys: keys, cluster: nil))
+        #expect(ListReorder.canDrop(at: 2, keys: keys, cluster: nil))
+        #expect(!ListReorder.canDrop(at: 4, keys: keys, cluster: nil))
+        #expect(ListReorder.canDrop(at: 5, keys: keys, cluster: nil))
+    }
+
+    @Test("同じアプリをまとめるかは、初期設定はオン。保存して読み戻せる")
+    func groupsSameAppSetting() throws {
+        let suite = "PinstageTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var settings = StripSettings(defaults: defaults)
+        #expect(settings.groupsSameApp)
+        settings.groupsSameApp = false
+        settings.save(to: defaults)
+        #expect(!StripSettings(defaults: defaults).groupsSameApp)
+    }
+
 }
 
 @Suite("グループの名前")
@@ -115,26 +200,26 @@ struct StripRowSizingTests {
     @Test("少ないときは、一覧の高さに収まるよう広げる（上限まで）")
     func fill() {
         // (700 - 0 - 6×6) ÷ 7 ≒ 94.9 → 上限 200 の中なので、そのまま
-        let height = StripRowSizing.rowHeight(available: 700, count: 7, spacing: 6, footer: 0, maximum: 200)
+        let height = StripRowSizing.rowHeight(available: 700, count: 7, spacing: 6, maximum: 200)
         #expect(abs(height - (700 - 36) / 7) < 0.001)
-        #expect(StripRowSizing.rowHeight(available: 700, count: 2, spacing: 6, footer: 0, maximum: 88) == 88)
+        #expect(StripRowSizing.rowHeight(available: 700, count: 2, spacing: 6, maximum: 88) == 88)
     }
 
     @Test("多いときは小さい値になり、中身の高さのまま（スクロール）になる")
     func overflow() {
-        // (300 - 24 - 6×39) ÷ 40 ≒ 1pt。どの行の中身より低いので、中身の高さのまま並ぶ
-        #expect(StripRowSizing.rowHeight(available: 300, count: 40, spacing: 6, footer: 24, maximum: 88) < 10)
-        #expect(StripRowSizing.rowHeight(available: 100, count: 40, spacing: 6, footer: 24, maximum: 88) == 0)
+        // (300 - 6×39) ÷ 40 ≒ 1.6pt。どの行の中身より低いので、中身の高さのまま並ぶ
+        #expect(StripRowSizing.rowHeight(available: 300, count: 40, spacing: 6, maximum: 88) < 10)
+        #expect(StripRowSizing.rowHeight(available: 100, count: 40, spacing: 6, maximum: 88) == 0)
     }
 
     @Test("一覧の行は、ウインドウの数にかかわらず決まった高さ（ブラウザの縦のタブと同じくらい）")
     func listRows() {
-        let few = StripRowSizing.rowHeight(kind: .list(.small), available: 700, count: 2, footer: 0)
-        let many = StripRowSizing.rowHeight(kind: .list(.small), available: 700, count: 40, footer: 0)
+        let few = StripRowSizing.rowHeight(kind: .list(.small), available: 700, count: 2)
+        let many = StripRowSizing.rowHeight(kind: .list(.small), available: 700, count: 40)
         #expect(few == 34)
         #expect(many == 34)
         // サムネイルは、少ないほど大きく広げる
-        let thumbnail = StripRowSizing.rowHeight(kind: .thumbnail(.small), available: 700, count: 2, footer: 0)
+        let thumbnail = StripRowSizing.rowHeight(kind: .thumbnail(.small), available: 700, count: 2)
         #expect(thumbnail > 34)
         // 一覧は、行の間も詰める
         #expect(StripRowSizing.spacing(kind: .list(.small)) < StripRowSizing.spacing(kind: .thumbnail(.small)))
@@ -144,7 +229,7 @@ struct StripRowSizingTests {
     func tileRows() {
         for size in StripIconSize.allCases {
             let kind = StripRowKind.tile(size)
-            #expect(StripRowSizing.rowHeight(kind: kind, available: 700, count: 2, footer: 0) == size.tileHeight)
+            #expect(StripRowSizing.rowHeight(kind: kind, available: 700, count: 2) == size.tileHeight)
             #expect(kind.iconSize == size.iconSize)
             #expect(kind.showsIconOnly)
             // タイルにアイコンが収まる
@@ -174,12 +259,12 @@ struct StripRowSizingTests {
         }
         for size in sizes {
             // 一覧の行は、大きさで決まった高さ。アイコンが収まる
-            #expect(StripRowSizing.rowHeight(kind: .list(size), available: 700, count: 2, footer: 0) == size.listRowHeight)
+            #expect(StripRowSizing.rowHeight(kind: .list(size), available: 700, count: 2) == size.listRowHeight)
             #expect(size.listIconSize < size.listRowHeight)
         }
         // 横長の帯でも、「小」はいままでの大きさ
         #expect(StripRowSizing.barRowHeight(kind: .thumbnail(.small)) == 116)
-        #expect(StripRowSizing.barItemWidth(kind: .thumbnail(.small), available: 1000, count: 3, trailing: 0) == 150)
+        #expect(StripRowSizing.barItemWidth(kind: .thumbnail(.small), available: 1000, count: 3) == 150)
     }
 }
 
@@ -355,21 +440,6 @@ struct SubsetReorderTests {
     }
 }
 
-@Suite("ほかのデスクトップのウインドウ")
-struct OtherSpacesSettingTests {
-    @Test("初期設定は、いまのデスクトップだけ。保存して読み戻せる")
-    func persistence() throws {
-        let suite = "PinstageTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        var settings = StripSettings(defaults: defaults)
-        #expect(!settings.showsOtherSpaces)
-        settings.showsOtherSpaces = true
-        settings.save(to: defaults)
-        #expect(StripSettings(defaults: defaults).showsOtherSpaces)
-    }
-}
-
 @Suite("ウインドウのディスプレイ")
 struct DisplayAssignmentTests {
     // 左に 1600×1000、右に 1920×1080 のディスプレイ
@@ -387,17 +457,5 @@ struct DisplayAssignmentTests {
         #expect(DisplayAssignment.displayIndex(for: CGRect(x: 4000, y: 100, width: 300, height: 300), displays: displays) == 1)
         #expect(DisplayAssignment.displayIndex(for: CGRect(x: -900, y: 100, width: 300, height: 300), displays: displays) == 0)
         #expect(DisplayAssignment.displayIndex(for: .zero, displays: []) == nil)
-    }
-
-    @Test("ほかのディスプレイのウインドウも出す設定は、初期設定でオフ。保存して読み戻せる")
-    func setting() throws {
-        let suite = "PinstageTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        var settings = StripSettings(defaults: defaults)
-        #expect(!settings.showsOtherDisplays)
-        settings.showsOtherDisplays = true
-        settings.save(to: defaults)
-        #expect(StripSettings(defaults: defaults).showsOtherDisplays)
     }
 }

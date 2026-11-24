@@ -248,3 +248,21 @@ struct DesktopPlacementTests {
         #expect(since == nil)
     }
 }
+
+@Suite("隠されたウインドウ")
+struct HiddenWindowsTests {
+    @Test("いま見ているデスクトップにあるのに画面に出ていないものだけ（最小化・隠したアプリのもの、ほかのデスクトップのものは除く）")
+    func hidden() {
+        let spaces: [String: Set<UInt64>] = [
+            "shown": [1], "closed": [1], "minimized": [1], "otherDesktop": [2], "secondDisplay": [5],
+        ]
+        let result = HiddenWindows.ids(
+            spaces: spaces,
+            current: [1, 5],
+            onScreen: ["shown", "secondDisplay"],
+            floating: ["minimized"]
+        )
+        #expect(result == ["closed"])
+    }
+}
+

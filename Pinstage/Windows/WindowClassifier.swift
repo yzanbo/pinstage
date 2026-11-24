@@ -17,54 +17,53 @@ struct WindowClassification {
     var windowSpaces: [AXUIElement: Set<UInt64>]?
     /// デスクトップの名前
     var desktopNames: [UInt64: DesktopName]
-    /// いまのデスクトップの見分け（「ほかのデスクトップのウインドウも出す」ときは見分けないので nil）
-    var activeSpace: ActiveSpace?
+    /// いまのデスクトップの見分け
+    var activeSpace: ActiveSpace
     /// ウインドウごとの、あるディスプレイの鍵（ディスプレイごとに分けないときは見分けないので nil）
     var windowDisplays: [AXUIElement: String]?
+    /// 隠されたウインドウ（いま見ているデスクトップにあるのに、画面に出ていない。最小化・アプリを隠したものは除く）。
+    /// × で閉じてもウインドウを捨てずに隠すだけのアプリ（LINE など）のもの。非公開の API が使えないときは空
+    var hiddenWindows: Set<AXUIElement>
 }
 
 /// 読んだウインドウを、どのデスクトップ・どのディスプレイのものか見分ける
 enum WindowClassifier {
-    /// - Parameters:
-    ///   - showsOtherSpaces: 「ほかのデスクトップのウインドウも出す」か（出すなら、いまのデスクトップのものを見分けない）
-    ///   - separatesDisplays: ストリップごとに、そのディスプレイのウインドウだけを並べるか（並べないなら、ディスプレイを見分けない）
-    static func classify(_ items: [WindowItem], showsOtherSpaces: Bool, separatesDisplays: Bool) -> WindowClassification {
+    /// - Parameter separatesDisplays: ウインドウバーごとに、そのディスプレイのウインドウだけを並べるか（並べないなら、ディスプレイを見分けない）
+    static func classify(_ items: [WindowItem], separatesDisplays: Bool) -> WindowClassification {
         // どのデスクトップのウインドウかは、非公開の API が使えれば、設定にかかわらず読む（ほかのデスクトップの印に使う）
         let displayList = SkyLight.isAvailable ? SkyLight.displays() : nil
         var spaces = displayList == nil ? nil : windowSpaces(of: items)
-        var result = WindowClassification(windowSpaces: nil, desktopNames: desktopNames(displayList ?? []))
-        // どちらも見分けなくてよいときは、枠を読まない（応答の遅いアプリがあると時間がかかるため）
-        guard !showsOtherSpaces || separatesDisplays else {
-            result.windowSpaces = spaces
-            return result
-        }
         let frames = AXWindow.frames(of: items)
         let displays = assignDisplays(frames)
-        if !showsOtherSpaces {
-            let snapshot = CurrentSpace.snapshot(among: items, frames: frames)
-            var spaceIDs = snapshot.onScreen.union(snapshot.floating)
-            if var known = spaces, let displayList {
-                let current = Set(displayList.map(\.current))
-                // 番号が分からなかったウインドウは、画面に出ていれば、いま表に出ているデスクトップのものとする
-                for id in snapshot.onScreen where known[id] == nil { known[id] = current }
-                spaces = known
-                // いま表に出ているデスクトップのウインドウ（ほかのウインドウに隠れていても入る）
-                spaceIDs = Set(items.filter { !(known[$0.id] ?? []).isDisjoint(with: current) }.map(\.id)).union(snapshot.floating)
-            }
-            // フルスクリーンのウインドウは、デスクトップの一覧に入れないので、どのディスプレイのものかと一緒に覚える
-            var fullScreen: [AXUIElement: DesktopSnapshot<AXUIElement>.Display] = [:]
-            for id in snapshot.onScreen where AXWindow.isFullScreen(id) {
-                fullScreen[id] = displays[id].map { .known($0) } ?? .unknown
-            }
-            result.activeSpace = WindowClassification.ActiveSpace(
+        let snapshot = CurrentSpace.snapshot(among: items, frames: frames)
+        var spaceIDs = snapshot.onScreen.union(snapshot.floating)
+        var hidden: Set<AXUIElement> = []
+        if var known = spaces, let displayList {
+            let current = Set(displayList.map(\.current))
+            // 隠されたウインドウ（× で閉じても隠すだけのアプリのもの）。決まりは PinstageCore の HiddenWindows
+            hidden = HiddenWindows.ids(spaces: known, current: current, onScreen: snapshot.onScreen, floating: snapshot.floating)
+            // 番号が分からなかったウインドウは、画面に出ていれば、いま表に出ているデスクトップのものとする
+            for id in snapshot.onScreen where known[id] == nil { known[id] = current }
+            spaces = known
+            // いま表に出ているデスクトップのウインドウ（ほかのウインドウに隠れていても入る）
+            spaceIDs = Set(items.filter { !(known[$0.id] ?? []).isDisjoint(with: current) }.map(\.id)).union(snapshot.floating)
+        }
+        // フルスクリーンのウインドウは、デスクトップの一覧に入れないので、どのディスプレイのものかと一緒に覚える
+        var fullScreen: [AXUIElement: DesktopSnapshot<AXUIElement>.Display] = [:]
+        for id in snapshot.onScreen where AXWindow.isFullScreen(id) {
+            fullScreen[id] = displays[id].map { .known($0) } ?? .unknown
+        }
+        return WindowClassification(
+            windowSpaces: spaces,
+            desktopNames: desktopNames(displayList ?? []),
+            activeSpace: WindowClassification.ActiveSpace(
                 ids: spaceIDs,
                 floating: snapshot.floating,
                 snapshot: DesktopSnapshot(onScreen: snapshot.onScreen, fullScreen: fullScreen, ownWindowNumbers: snapshot.ownWindowNumbers)
-            )
-        }
-        if separatesDisplays { result.windowDisplays = displays }
-        result.windowSpaces = spaces
-        return result
+            ),
+            windowDisplays: separatesDisplays ? displays : nil,
+            hiddenWindows: hidden
+        )
     }
 
     /// デスクトップの名前（ディスプレイごとに左から「デスクトップ 1」「デスクトップ 2」…。計算は PinstageCore の DesktopNaming）

@@ -11,11 +11,13 @@ struct WindowSection: View {
     @State private var listHeight: CGFloat = 0
     /// 横長の帯で、一覧に使える幅（一覧のタブの幅を決めるのに使う）
     @State private var listWidth: CGFloat = 0
+    /// 「視差効果を減らす」がオンなら、動きを付けない
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// 「ほかのウインドウ」のボタンの高さ（おおよそ）
-    private static let footerHeight: CGFloat = 24
-    /// 横長の帯の、「ほかのウインドウ」のボタンの幅
-    private static let moreWidth: CGFloat = 30
+    /// ウインドウが増えた・減った・並びが変わったときの動き（Chrome のタブと同じく、ほかの行がすべるように詰まる）
+    private var listAnimation: Animation? {
+        reduceMotion ? nil : .snappy(duration: 0.25)
+    }
 
     var body: some View {
         if strip.isHorizontal {
@@ -25,19 +27,13 @@ struct WindowSection: View {
         }
     }
 
-    /// 並べる数より多いウインドウを開く・たたむボタン
-    /// - Parameters:
-    ///   - hidden: たたんでいるウインドウの数
-    ///   - short: 短く「+n」「−」で出すか（細い帯・横長の帯。長い説明は、ポインタを乗せると出す）
-    private func moreButton(hidden: Int, short: Bool) -> some View {
-        let title = stage.showsAllWindows ? "たたむ" : "ほかのウインドウ（\(hidden)）"
-        return Button(short ? (stage.showsAllWindows ? "−" : "+\(hidden)") : title) {
-            stage.showsAllWindows.toggle()
-            thumbnails.captureNow()
-        }
-        .buttonStyle(.link)
-        .font(.caption)
-        .help(short ? title : "")
+    /// 行が現れる・消えるときの動き（縦に並べるときは上から、横に並べるときは左から広がる）
+    private static func rowTransition(horizontal: Bool) -> AnyTransition {
+        let anchor: UnitPoint = horizontal ? .leading : .top
+        return .asymmetric(
+            insertion: .scale(scale: 0.85, anchor: anchor).combined(with: .opacity),
+            removal: .scale(scale: 0.85, anchor: anchor).combined(with: .opacity)
+        )
     }
 
     private var emptyMessage: some View {
@@ -49,33 +45,23 @@ struct WindowSection: View {
     /// 上下に出したとき: ウインドウを横に並べる（多いときは横にスクロール）
     @ViewBuilder
     private var bar: some View {
-        let limit = stage.stripSettings.visibleCount
         let rows = strip.rows
-        let all = strip.candidates
         let kind = strip.rowKind
         let spacing = StripRowSizing.spacing(kind: kind)
-        let hasMore = all.count > limit
         // 一覧は、ブラウザの横のタブのように、使える幅を同じ幅で分ける
-        let itemWidth = StripRowSizing.barItemWidth(
-            kind: kind,
-            available: listWidth,
-            count: rows.count,
-            trailing: hasMore ? Self.moreWidth + spacing : 0
-        )
+        let itemWidth = StripRowSizing.barItemWidth(kind: kind, available: listWidth, count: rows.count)
         ScrollView(.horizontal) {
-            HStack(spacing: spacing) {
-                rowViews(rows, rowHeight: StripRowSizing.barRowHeight(kind: kind), width: itemWidth)
-                if hasMore {
-                    moreButton(hidden: all.count - limit, short: true)
-                        .frame(width: Self.moreWidth)
-                }
-                if all.isEmpty, stage.isTrusted {
+            // 行の間は、行ごとに空ける（同じアプリのウインドウは詰めてつなぐ）
+            HStack(spacing: 0) {
+                rowViews(rows, rowHeight: StripRowSizing.barRowHeight(kind: kind), width: itemWidth, joining: .horizontal, spacing: spacing)
+                if rows.isEmpty, stage.isTrusted {
                     emptyMessage
                         .padding(.horizontal, 6)
                 }
             }
             .coordinateSpace(.named(ReorderState.windowSpace))
             .overlay(alignment: .topLeading) { DropLine(reorder: reorder, count: rows.count, layout: .columns) }
+            .animation(listAnimation, value: rows.map(\.id))
         }
         .scrollIndicators(.never)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
@@ -85,15 +71,12 @@ struct WindowSection: View {
     /// 左右に出したとき: ウインドウを縦に並べる
     @ViewBuilder
     private var column: some View {
-        let limit = stage.stripSettings.visibleCount
-        // このストリップが置かれたデスクトップの一覧で並べる（ほかのデスクトップに切り替えている間も、この一覧のまま）
+        // このウインドウバーが置かれたデスクトップの一覧で並べる（ほかのデスクトップに切り替えている間も、この一覧のまま。数で区切らず、多いときはスクロール）
         let rows = strip.rows
-        // ほかのウインドウの数は、ストリップに並べる候補（このデスクトップのウインドウ）で数える
-        let all = strip.candidates
         let isIconOnly = strip.isCompact
         VStack(alignment: .leading, spacing: 6) {
             if !isIconOnly {
-                SectionHeader(title: "ウインドウ", count: all.count)
+                SectionHeader(title: "ウインドウ", count: rows.count)
             }
             // 一覧・アイコンは決まった高さ。サムネイルは、ウインドウが少ないとき、行を同じ高さで広げて縦いっぱいに並べる（多いときは中身の高さのままスクロール）
             let kind = strip.rowKind
@@ -101,8 +84,7 @@ struct WindowSection: View {
             let rowHeight = StripRowSizing.rowHeight(
                 kind: kind,
                 available: listHeight,
-                count: rows.count,
-                footer: all.count > limit ? Self.footerHeight : 0
+                count: rows.count
             )
             let tiles = kind.showsIconOnly
             ScrollView {
@@ -114,19 +96,18 @@ struct WindowSection: View {
                     }
                     .coordinateSpace(.named(ReorderState.windowSpace))
                     .overlay(alignment: .topLeading) { DropLine(reorder: reorder, count: rows.count, layout: .grid) }
+                    .animation(listAnimation, value: rows.map(\.id))
                 }
-                LazyVStack(spacing: spacing) {
+                // 行の間は、行ごとに空ける（同じアプリのウインドウは詰めてつなぐ）
+                LazyVStack(spacing: 0) {
                     if !tiles {
-                        rowViews(rows, rowHeight: rowHeight)
+                        rowViews(rows, rowHeight: rowHeight, joining: .vertical, spacing: spacing)
                     }
-                    if all.count > limit {
-                        moreButton(hidden: all.count - limit, short: isIconOnly)
-                            .padding(.top, 2)
-                    }
-                    if all.isEmpty, stage.isTrusted, !isIconOnly {
+                    if rows.isEmpty, stage.isTrusted, !isIconOnly {
                         emptyMessage
                     }
                 }
+                .animation(listAnimation, value: rows.map(\.id))
                 .coordinateSpace(.named(ReorderState.windowSpace))
                 .overlay(alignment: .topLeading) {
                     if !tiles { DropLine(reorder: reorder, count: rows.count) }
@@ -139,13 +120,22 @@ struct WindowSection: View {
     }
 
     /// ウインドウの行（アイコンの並びでも、一覧でも同じ行。rowHeight が 0 なら、中身の高さのまま）
-    /// - Parameter width: 横長の帯に並べるときの、1 つ分の幅（縦に並べるときは nil で、幅いっぱい）
-    private func rowViews(_ rows: [WindowItem], rowHeight: CGFloat, width: CGFloat? = nil) -> some View {
-        ForEach(Array(rows.enumerated()), id: \.element.id) { index, item in
+    /// - Parameters:
+    ///   - width: 横長の帯に並べるときの、1 つ分の幅（縦に並べるときは nil で、幅いっぱい）
+    ///   - joining: となり合った同じアプリのウインドウを、詰めて 1 つの枠につなぐ向き（nil ならつながない。アイコンの並び）
+    ///   - spacing: 行の間（つなぐとき。つながない行の間はこの幅、つなぐ行の間は RowJoin.spacing）
+    private func rowViews(_ rows: [WindowItem], rowHeight: CGFloat, width: CGFloat? = nil, joining: RowJoin.Axis? = nil, spacing: CGFloat = 0) -> some View {
+        let apps = rows.map(\.appKey)
+        return ForEach(Array(rows.enumerated()), id: \.element.id) { index, item in
+            let join = joining.map { RowJoin(index: index, apps: apps, axis: $0) } ?? RowJoin()
             WindowRow(
-                item: item, index: index, count: rows.count, rowHeight: rowHeight, fixedWidth: width,
+                item: item, index: index, count: rows.count, rowHeight: rowHeight, fixedWidth: width, join: join,
                 reorder: reorder, stage: stage, thumbnails: thumbnails, strip: strip
             )
+            // 行の前の間（最初の行は空けない。同じアプリの前の行との間は、まとまりの枠の中で空ける）
+            .padding(join.axis == .horizontal ? .leading : .top, index == 0 || joining == nil || join.previous ? 0 : spacing)
+            // 開いたウインドウは、その位置で広がって現れ、閉じたウインドウは縮んで消える（Chrome のタブと同じ）
+            .transition(Self.rowTransition(horizontal: joining == .horizontal))
         }
     }
 }
@@ -163,6 +153,8 @@ private struct WindowRow: View {
     let rowHeight: CGFloat
     /// 横長の帯に並べるときの幅（縦に並べるときは nil で、幅いっぱい）
     var fixedWidth: CGFloat?
+    /// となり合った同じアプリのウインドウとのつながり（つながる側の角を小さくする）
+    var join = RowJoin()
     let reorder: ReorderState
     let stage: StageController
     let thumbnails: ThumbnailStore
@@ -173,15 +165,13 @@ private struct WindowRow: View {
     private var isOnStage: Bool { stage.stage(on: strip.screen).selection.contains(item.id) }
     /// 行の描き方（形式と大きさから決まる）
     private var kind: StripRowKind { strip.rowKind }
-    /// アイコンの並び（タイル）の 1 つとして描くか
-    private var isTile: Bool { kind.showsIconOnly }
     private var showsThumbnail: Bool { kind.isThumbnail }
-    /// アイコンだけを描くか（アイコンの並びのとき）
+    /// アイコンだけを描くか（アイコンの並び（タイル）のとき）
     private var showsIconOnly: Bool { kind.showsIconOnly }
     /// 並べ替えのときの並べ方（横長の帯では横に、アイコンの並びでは格子に、ほかは縦に並んでいる）
     private var reorderLayout: ReorderLayout {
         if strip.isHorizontal { return .columns }
-        return isTile ? .grid : .rows
+        return showsIconOnly ? .grid : .rows
     }
 
     /// サムネイルの高さ（大きさで決まる高さより低くはせず、行が大きくなったら、名前の行と余白の分を除いた高さまで広げる）
@@ -198,35 +188,53 @@ private struct WindowRow: View {
         content
             .padding(.horizontal, showsIconOnly ? 4 : 8)
             .padding(.vertical, kind.isList || showsIconOnly ? 4 : 6)
-            .modifier(RowFrame(width: fixedWidth, height: rowHeight))
+            // 横長の帯では、まとまりの枠の分だけ低くする（帯の高さに収める）
+            .modifier(RowFrame(width: fixedWidth, height: join.isInCluster && join.axis == .horizontal ? rowHeight - ClusterTray.inset * 2 : rowHeight))
             .background(
-                RoundedRectangle(cornerRadius: StripStyle.cornerRadius, style: .continuous)
+                join.shape
                     .fill(isOnStage ? StripStyle.selectedFill : (isHovering ? StripStyle.rowHoverFill : StripStyle.rowFill))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: StripStyle.cornerRadius, style: .continuous)
+                join.shape
                     .strokeBorder(isOnStage ? Color.accentColor.opacity(0.9) : .clear, lineWidth: 1.5)
             )
             .contentShape(Rectangle())
             .onHover { isHovering = $0 }
             .animation(.easeOut(duration: 0.12), value: isHovering)
+            // 同じアプリのウインドウを、うすい枠（トレイ）で囲む
+            .modifier(ClusterTray(join: join))
             .modifier(ReorderDrag(
                 index: index,
                 count: count,
                 space: ReorderState.windowSpace,
                 layout: reorderLayout,
+                // 同じアプリをまとめているとき、ほかのアプリの間へドラッグしている間は、同じアプリの行も一緒に動かす
+                cluster: stage.stripSettings.groupsSameApp ? join.cluster : nil,
+                // 同じアプリをまとめているときは、ほかのアプリのまとまりの中には入れられない
+                canDrop: dropRule,
                 reorder: reorder,
                 strip: strip,
                 onTap: handleClick,
                 onMove: { stage.moveWindow(from: index, dropIndex: $0, visible: strip.rows.map(\.id)) },
-                // ストリップの外（ステージ）で離したら、ステージに足す
-                onDropOutside: { stage.add(item, on: StageController.screenUnderPointer ?? strip.screen) },
-                // グループの行の上で離したら、そのグループに足す
-                onDropOnGroup: { stage.addWindow(item, toGroup: $0) }
+                // ウインドウバーの外（ステージ）で離したら、ステージに足す（まとめて動かしているときは、まとまりのウインドウをすべて）
+                onDropOutside: { stage.add(draggedItems, on: StageController.screenUnderPointer ?? strip.screen) },
+                // グループの行の上で離したら、そのグループに足す（同じく、まとまりのウインドウをすべて）
+                onDropOnGroup: { group in draggedItems.forEach { stage.addWindow($0, toGroup: group) } }
             ))
+            // スクロールして見えているかを覚える（サムネイルは見えている行だけ撮る）。
+            // 見えてきた行のサムネイルがまだなければ、すぐ撮る
+            .onScrollVisibilityChange(threshold: 0.05) { visible in
+                strip.setRowVisible(item.id, visible)
+                if visible, showsThumbnail, thumbnails.images[item.id] == nil { thumbnails.captureNow() }
+            }
+            // ほかの行のドラッグについて動く（同じアプリをまとめて動かしている間）
+            .offset(reorder.followers.contains(index) ? reorder.followOffset : .zero)
+            .zIndex(reorder.followers.contains(index) ? 1 : 0)
             .contextMenu {
                 if isOnStage {
                     Button("ステージから外す") { stage.remove(item, on: strip.screen) }
+                    // 複数を ⌘＋クリックで選んだあと、そのまま右クリックで保存できるように
+                    Button("ステージをグループとして保存") { stage.saveStageAsGroup(on: strip.screen) }
                     Divider()
                 }
                 Button("ウインドウを閉じる") { stage.close(item) }
@@ -235,7 +243,7 @@ private struct WindowRow: View {
             .help(helpText)
     }
 
-    /// ほかのデスクトップのウインドウなら、そのデスクトップの名前（「ほかのデスクトップのウインドウも出す」のとき）
+    /// ほかのデスクトップのウインドウなら、そのデスクトップの名前（しまってあるウインドウなど、いまのデスクトップ以外のものが並んだとき）
     private var desktopName: DesktopName? {
         stage.desktopName(of: item, except: strip.spaceID)
     }
@@ -340,6 +348,21 @@ private struct WindowRow: View {
                 .foregroundStyle(.secondary)
                 .help("しまってあるウインドウ")
         }
+    }
+
+    /// ドラッグで一緒に動かすウインドウ（同じアプリをまとめているときは、まとまりのウインドウすべて。ほかは、この行だけ）
+    private var draggedItems: [WindowItem] {
+        guard stage.stripSettings.groupsSameApp, let cluster = join.cluster else { return [item] }
+        let rows = strip.rows
+        return cluster.compactMap { rows.indices.contains($0) ? rows[$0] : nil }
+    }
+
+    /// 落とせる位置の決まり（同じアプリをまとめているときだけ。ほかはどこでも落とせる）。
+    /// まとまりはまとめて動かすので、自分のまとまりの中・すぐ前後と、ほかのアプリのまとまりの中には落とせない（決まりは PinstageCore の ListReorder.canDrop）
+    private var dropRule: ((Int) -> Bool)? {
+        guard stage.stripSettings.groupsSameApp else { return nil }
+        let cluster = join.cluster
+        return { drop in ListReorder.canDrop(at: drop, keys: strip.rows.map(\.appKey), cluster: cluster) }
     }
 
     /// クリック（1 回目でそのウインドウだけを出し、2 回目＝ダブルクリックでステージいっぱいに広げる。⌘ なら足す・外す）

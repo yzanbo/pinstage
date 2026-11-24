@@ -13,15 +13,19 @@ final class ReorderState {
     var frames: [Int: CGRect] = [:]
     /// 落とす位置（その番号の行の前。並びが変わらない位置なら nil）
     var dropIndex: Int?
+    /// ドラッグしている行について一緒に動く行の番号（同じアプリをまとめて動かしている間。ドラッグしている行は含まない）
+    var followers: Set<Int> = []
+    /// 一緒に動く行の、ずらす量（ドラッグしている行と同じ）
+    var followOffset: CGSize = .zero
 }
 
 /// 一覧の並べ方（落とす位置の決め方と、落とす位置に引く線の向きが変わる）
 enum ReorderLayout {
-    /// 縦に並べた行（左右のストリップの一覧）
+    /// 縦に並べた行（左右のウインドウバーの一覧）
     case rows
-    /// 横に並べたもの（上下のストリップ）
+    /// 横に並べたもの（上下のウインドウバー）
     case columns
-    /// 格子に並べたアイコン（左右のストリップの「アイコンの並び」）
+    /// 格子に並べたアイコン（左右のウインドウバーの「アイコンの並び」）
     case grid
 }
 
@@ -32,6 +36,10 @@ struct ReorderDrag: ViewModifier {
     let space: String
     /// 一覧の並べ方（落とす位置を、縦に並べた行なら高さ、横に並べたものなら x、格子なら縦横の位置で決める）
     var layout: ReorderLayout = .rows
+    /// 同じアプリの行の番号の範囲（同じアプリをまとめているときだけ）。ドラッグしている間は、範囲の行も一緒に動かす
+    var cluster: ClosedRange<Int>?
+    /// その位置に落とせるか（落とせない位置には線を出さず、離しても動かさない。nil ならどこでも落とせる）
+    var canDrop: ((Int) -> Bool)?
     let reorder: ReorderState
     let strip: StripController
     let onTap: () -> Void
@@ -69,14 +77,21 @@ struct ReorderDrag: ViewModifier {
                             // グループの上では、並べ替えの線を出さない
                             reorder.dropIndex = nil
                         } else if strip.frame.contains(NSEvent.mouseLocation) {
-                            let drop = switch layout {
+                            let target = switch layout {
                             case .rows: ListReorder.dropIndex(forY: value.location.y, frames: reorder.frames, count: count)
                             case .columns: ListReorder.dropIndex(forX: value.location.x, frames: reorder.frames, count: count)
                             case .grid: ListReorder.gridDropIndex(for: value.location, frames: reorder.frames, count: count)
                             }
-                            reorder.dropIndex = ListReorder.isNoOp(from: index, dropIndex: drop) ? nil : drop
+                            // 落とせない位置（同じアプリをまとめているときの、まとまりの中）は、線を出さない
+                            let allowed = canDrop?(target) ?? true
+                            reorder.dropIndex = !allowed || ListReorder.isNoOp(from: index, dropIndex: target) ? nil : target
                         } else {
                             reorder.dropIndex = nil
+                        }
+                        // 同じアプリのまとまりは、ドラッグしている間ずっと、まとめて動かす
+                        if let cluster, cluster.count > 1 {
+                            reorder.followers = Set(cluster).subtracting([index])
+                            reorder.followOffset = value.translation
                         }
                     }
                     .onEnded { value in
@@ -86,6 +101,8 @@ struct ReorderDrag: ViewModifier {
                         offset = .zero
                         strip.isDragging = false
                         reorder.dropIndex = nil
+                        reorder.followers = []
+                        reorder.followOffset = .zero
                         if onDropOnGroup != nil { strip.groupTargets.hovered = nil }
                         if !moved {
                             onTap()
@@ -107,17 +124,18 @@ struct DropLine: View {
     let count: Int
     var layout: ReorderLayout = .rows
 
-    private var isGrid: Bool { layout != .rows }
+    /// 縦の線を引くか（横に並べたもの・格子。縦に並べた行は横の線）
+    private var drawsVerticalLine: Bool { layout != .rows }
 
     var body: some View {
         if let drop = reorder.dropIndex {
-            if isGrid, let frame = gridLine(drop) {
+            if drawsVerticalLine, let frame = gridLine(drop) {
                 Capsule()
                     .fill(Color.accentColor)
                     .frame(width: 3, height: frame.height)
                     .offset(x: frame.minX - 1.5, y: frame.minY)
                     .allowsHitTesting(false)
-            } else if !isGrid, let y = lineY(drop) {
+            } else if !drawsVerticalLine, let y = lineY(drop) {
                 Capsule()
                     .fill(Color.accentColor)
                     .frame(height: 3)
@@ -127,9 +145,13 @@ struct DropLine: View {
         }
     }
 
+    /// 線の太さの半分。いちばん上（左）に落とすときも、線が一覧の外に出て切り取られないよう、この分だけ内側に寄せる
+    private static let inset: CGFloat = 1.5
+
     /// 横の線の高さ（落とす位置の行の上の隙間。最後なら最後の行の下）
     private func lineY(_ drop: Int) -> CGFloat? {
-        if drop < count, let frame = reorder.frames[drop] { return frame.minY - 3 }
+        // いちばん上の行の上は一覧の端なので、隙間の代わりに一覧の内側に引く（外に出ると、スクロールの欄に切り取られて見えない）
+        if drop < count, let frame = reorder.frames[drop] { return max(Self.inset, frame.minY - 3) }
         if let last = reorder.frames[count - 1] { return last.maxY + 3 }
         return nil
     }
@@ -137,7 +159,8 @@ struct DropLine: View {
     /// 縦の線の位置（x と、線の上端・高さ。落とす位置のアイコンの左の隙間。最後なら最後のアイコンの右）
     private func gridLine(_ drop: Int) -> CGRect? {
         if drop < count, let frame = reorder.frames[drop] {
-            return CGRect(x: frame.minX - 3, y: frame.minY, width: 0, height: frame.height)
+            // いちばん左のアイコンの左も、一覧の内側に引く
+            return CGRect(x: max(Self.inset, frame.minX - 3), y: frame.minY, width: 0, height: frame.height)
         }
         if let last = reorder.frames[count - 1] {
             return CGRect(x: last.maxX + 3, y: last.minY, width: 0, height: last.height)

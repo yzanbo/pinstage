@@ -24,6 +24,8 @@ enum StripPreview {
         case empty
         /// ほかのデスクトップのウインドウも並べている
         case otherDesktop
+        /// 同じアプリのウインドウが 2 つずつある（となりに並べてつなぐ）
+        case sameApp
     }
 
     /// ストリップのほかに描ける画面
@@ -150,9 +152,12 @@ enum StripPreview {
             ("/System/Applications/Notes.app", "メモ", "買い物リスト"),
             ("/System/Applications/Calendar.app", "カレンダー", "2026年11月"),
             ("/System/Applications/Utilities/Terminal.app", "ターミナル", "zsh — 80×24"),
-        ]
+        ] + (scenario == .sameApp ? [
+            ("/Applications/Safari.app", "Safari", "Apple（日本）"),
+            ("/System/Applications/Utilities/Terminal.app", "ターミナル", "make run"),
+        ] : [])
         // 見本のウインドウ（番号の違うアプリの要素を、ウインドウの代わりに使う）
-        let windows = apps.enumerated().map { index, app in
+        let created = apps.enumerated().map { index, app in
             WindowItem(
                 id: AXUIElementCreateApplication(pid_t(90_000 + index)),
                 pid: pid_t(90_000 + index),
@@ -163,10 +168,14 @@ enum StripPreview {
                 isMinimized: index == 3
             )
         }
+        // 後から開いたウインドウ（同じアプリの 2 つ目）は、本物と同じく、同じアプリのウインドウのすぐ後ろに入れる
+        let byID = Dictionary(created.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let windows = RecentOrder.appending(created.dropFirst(6).map(\.id), to: created.prefix(6).map(\.id)) { byID[$0]?.appKey }
+            .compactMap { byID[$0] }
         let signatures = windows.compactMap(\.signature)
         let groups = [
-            StageGroup(name: "開発", members: Array(signatures.prefix(2)), layout: .builtIn(.mainLeft), hasGap: false, displayID: nil),
-            StageGroup(name: "資料作り", members: [signatures[2], signatures[3], signatures[4]], layout: .builtIn(.auto), hasGap: true, displayID: nil),
+            StageGroup(name: "開発", members: Array(signatures.prefix(2)), layout: .builtIn(.mainLeft), displayID: nil),
+            StageGroup(name: "資料作り", members: [signatures[2], signatures[3], signatures[4]], layout: .builtIn(.auto), displayID: nil),
         ]
         stage.loadPreview(
             windows: windows,

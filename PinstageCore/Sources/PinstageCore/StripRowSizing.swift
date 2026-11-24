@@ -9,11 +9,10 @@ public enum StripRowSizing {
     ///   - available: 一覧に使える高さ
     ///   - count: 行の数
     ///   - spacing: 行と行の間
-    ///   - footer: 行の下に並べるもの（「ほかのウインドウ」のボタンなど）の高さ
     ///   - maximum: 行の高さの上限（間延びしないように）
-    public static func rowHeight(available: CGFloat, count: Int, spacing: CGFloat, footer: CGFloat, maximum: CGFloat) -> CGFloat {
+    public static func rowHeight(available: CGFloat, count: Int, spacing: CGFloat, maximum: CGFloat) -> CGFloat {
         guard count > 0, available > 0 else { return 0 }
-        let height = (available - footer - spacing * CGFloat(count - 1)) / CGFloat(count)
+        let height = (available - spacing * CGFloat(count - 1)) / CGFloat(count)
         return max(0, min(height, maximum))
     }
 
@@ -32,13 +31,13 @@ public enum StripRowSizing {
     public static let thumbnailCaptionHeight: CGFloat = 34
 
     /// 行の描き方に合わせた行の高さ。一覧・アイコンは決まった高さ、サムネイルは一覧の高さに収まるよう広げた高さ
-    public static func rowHeight(kind: StripRowKind, available: CGFloat, count: Int, footer: CGFloat) -> CGFloat {
+    public static func rowHeight(kind: StripRowKind, available: CGFloat, count: Int) -> CGFloat {
         switch kind {
         case .list(let size): size.listRowHeight
         case .tile(let size): size.tileHeight
         // 少ないときに広げる高さ（多いときは小さい値になり、中身の高さのまま。サムネイルの高さの下限は、ビューで大きさから決める）
         case .thumbnail:
-            rowHeight(available: available, count: count, spacing: spacing(kind: kind), footer: footer, maximum: maximumThumbnailRowHeight)
+            rowHeight(available: available, count: count, spacing: spacing(kind: kind), maximum: maximumThumbnailRowHeight)
         }
     }
 
@@ -76,8 +75,7 @@ public enum StripRowSizing {
     /// - Parameters:
     ///   - available: 一覧に使える幅
     ///   - count: ウインドウの数
-    ///   - trailing: 後ろに並べるもの（「ほかのウインドウ」のボタンなど）の幅
-    public static func barItemWidth(kind: StripRowKind, available: CGFloat, count: Int, trailing: CGFloat) -> CGFloat {
+    public static func barItemWidth(kind: StripRowKind, available: CGFloat, count: Int) -> CGFloat {
         switch kind {
         case .tile(let size): return size.tileWidth
         // サムネイルは、画面と同じ横長の形に近づける
@@ -85,7 +83,7 @@ public enum StripRowSizing {
         case .list(let size):
             let tabWidthRange = tabWidthRange(for: size)
             guard count > 0, available > 0 else { return tabWidthRange.upperBound }
-            let width = (available - trailing - spacing(kind: kind) * CGFloat(count - 1)) / CGFloat(count)
+            let width = (available - spacing(kind: kind) * CGFloat(count - 1)) / CGFloat(count)
             return min(max(width.rounded(.down), tabWidthRange.lowerBound), tabWidthRange.upperBound)
         }
     }

@@ -236,3 +236,26 @@ public enum DesktopAttribution {
         return (.merge(keep: keeper, close: here.filter { $0 != keeper }), true)
     }
 }
+
+/// 隠されたウインドウ（× で閉じてもウインドウを捨てずに隠すだけのアプリ（LINE など）のもの）の見分け
+///
+/// macOS は、隠されたウインドウも元のデスクトップにあるものとして扱い続けるので、
+/// 「いま見ているデスクトップにあるのに、画面に出ていない」ことで見分ける。
+/// 最小化したもの・隠したアプリのもの（floating）は、画面に出ていなくても隠されたものとしない。
+public enum HiddenWindows {
+    /// - Parameters:
+    ///   - spaces: ウインドウごとの、あるデスクトップ（分からないウインドウは入らない）
+    ///   - current: いま表に出ているデスクトップ（ディスプレイごと）
+    ///   - onScreen: 画面に出ているウインドウ
+    ///   - floating: 最小化したもの・隠したアプリのもの
+    public static func ids<Window: Hashable>(
+        spaces: [Window: Set<UInt64>],
+        current: Set<UInt64>,
+        onScreen: Set<Window>,
+        floating: Set<Window>
+    ) -> Set<Window> {
+        Set(spaces.compactMap { window, windowSpaces in
+            !windowSpaces.isDisjoint(with: current) && !onScreen.contains(window) && !floating.contains(window) ? window : nil
+        })
+    }
+}

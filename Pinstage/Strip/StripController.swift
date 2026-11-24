@@ -107,15 +107,25 @@ final class StripController {
     /// 前に置いたときの辺（辺を変えたときは、形が変わるので、動きを付けずに置き直す）
     private var placedEdge: StripEdge?
 
-    /// このストリップに並べる候補（このデスクトップ・このディスプレイのウインドウ）。
-    /// ほかのデスクトップに切り替えている間も、このデスクトップの一覧のまま
-    var candidates: [WindowItem] {
-        stage.spaceWindows(on: screen, spaceIDs: spaceState.windowIDs)
+    /// スクロールして、いま見えている行のウインドウ（サムネイルを撮る相手を、見えている行だけにするため）
+    private(set) var visibleRowIDs: Set<AXUIElement> = []
+
+    /// 行が見えた・見えなくなった（ウインドウバーの一覧から）
+    func setRowVisible(_ id: AXUIElement, _ visible: Bool) {
+        if visible { visibleRowIDs.insert(id) } else { visibleRowIDs.remove(id) }
     }
 
-    /// このストリップに並べるウインドウ（並べる数まで。「ほかのウインドウ」を開いていればすべて）
+    /// サムネイルを撮るウインドウ（並べたウインドウのうち、スクロールして見えている行だけ。まだ分からないときは、並べたものすべて）
+    var thumbnailTargets: [WindowItem] {
+        let rows = rows
+        let visible = rows.filter { visibleRowIDs.contains($0.id) }
+        return visible.isEmpty ? rows : visible
+    }
+
+    /// このウインドウバーに並べるウインドウ（このデスクトップ・このディスプレイのウインドウ。数で区切らない）。
+    /// ほかのデスクトップに切り替えている間も、このデスクトップの一覧のまま
     var rows: [WindowItem] {
-        stage.stripWindows(on: screen, spaceIDs: spaceState.windowIDs)
+        stage.spaceWindows(on: screen, spaceIDs: spaceState.windowIDs)
     }
 
     /// 「自動で隠す」のときに、いつ隠すか（キーで出したときは、すぐには隠さない）
@@ -206,7 +216,7 @@ final class StripController {
     /// ここで幅を決める（決めないと、見た目の幅だけが変わり、ステージの範囲は前の幅のまま残る）
     private func finishResizeIfReleased() {
         guard spaceState.resizingWidth != nil, NSEvent.pressedMouseButtons == 0 else { return }
-        DesktopTrace.log("ストリップの幅", "ドラッグの終わりの知らせが届かなかったので、ここで決める")
+        DesktopTrace.log("ウインドウバーの幅", "ドラッグの終わりの知らせが届かなかったので、ここで決める")
         endResize()
     }
 
@@ -250,7 +260,7 @@ final class StripController {
         isDragging = false
         guard let width = spaceState.resizingWidth else { return }
         spaceState.resizingWidth = nil
-        DesktopTrace.log("ストリップの幅", "決めた: \(Int(width))")
+        DesktopTrace.log("ウインドウバーの幅", "決めた: \(Int(width))")
         // いまの形式の幅として覚える（アイコンの並びの幅は、一覧・サムネイルの幅とは別）
         stage.stripSettings.width = width
     }

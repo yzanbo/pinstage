@@ -59,7 +59,6 @@ struct PersistenceTests {
             name: "開発",
             members: [WindowSignature(bundleID: "com.apple.Safari", title: "資料")],
             layout: .custom(layout.id),
-            hasGap: true,
             displayID: "DISPLAY-UUID"
         )
         let library = StageLibrary(groups: [group], customLayouts: [layout])
@@ -82,7 +81,7 @@ struct StripTests {
     func stageAlwaysShown() {
         let stage = StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .left, thickness: 230)
         let strip = StripGeometry.shownFrame(in: visible, edge: .left, thickness: 230)
-        #expect(stage.minX == strip.maxX + StripGeometry.margin)
+        #expect(stage.minX == strip.maxX + StripGeometry.stageGap)
         #expect(stage.maxX == visible.maxX)
     }
 
@@ -118,19 +117,19 @@ struct StripTests {
         let strip = StripGeometry.shownFrame(in: visible, edge: .left, thickness: 320)
         let stage = StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .left, thickness: 320)
         #expect(strip.width == 320)
-        #expect(stage.minX == strip.maxX + StripGeometry.margin)
+        #expect(stage.minX == strip.maxX + StripGeometry.stageGap)
         #expect(StripGeometry.hiddenFrame(in: visible, edge: .left, thickness: 320).maxX < visible.minX)
     }
 
     @Test("ドラッグの幅は範囲の中に収め、画面の半分より広くしない")
     func dragWidth() {
-        #expect(StripGeometry.width(forPointerX: 300, in: visible, edge: .left) == 300 - StripGeometry.margin)
+        #expect(StripGeometry.width(forPointerX: 300, in: visible, edge: .left) == 300 - StripGeometry.edgeMargin)
         #expect(StripGeometry.width(forPointerX: 20, in: visible, edge: .left) == StripGeometry.widthRange.lowerBound)
         #expect(StripGeometry.width(forPointerX: 2000, in: visible, edge: .left) == StripGeometry.widthRange.upperBound)
         let narrow = CGRect(x: 0, y: 0, width: 600, height: 800)
         #expect(StripGeometry.width(forPointerX: 500, in: narrow, edge: .left) == 300)
         // 右のストリップは、右端からの距離で決める（左へドラッグすると広がる）
-        #expect(StripGeometry.width(forPointerX: 1300, in: visible, edge: .right) == 300 - StripGeometry.margin)
+        #expect(StripGeometry.width(forPointerX: 1300, in: visible, edge: .right) == 300 - StripGeometry.edgeMargin)
         #expect(StripGeometry.width(forPointerX: 1590, in: visible, edge: .right) == StripGeometry.widthRange.lowerBound)
     }
 
@@ -147,7 +146,7 @@ struct StripTests {
         #expect((edge.isHorizontal ? strip.height : strip.width) == 200)
         #expect((edge.isHorizontal ? strip.width : strip.height) == (edge.isHorizontal ? visible.width : visible.height))
         // ステージは、ストリップと両側の間の分だけ狭くなる
-        let used = 200 + StripGeometry.margin * 2
+        let used = 200 + StripGeometry.edgeMargin + StripGeometry.stageGap
         #expect(stage.width == visible.width - (edge.isHorizontal ? 0 : used))
         #expect(stage.height == visible.height - (edge.isHorizontal ? used : 0))
         // 隠すときは、使える範囲の外へ出す
@@ -157,12 +156,12 @@ struct StripTests {
     @Test("ストリップは、その辺に寄せて置く")
     func edgePlacement() {
         let visible = CGRect(x: 0, y: 70, width: 1600, height: 905)
-        #expect(StripGeometry.shownFrame(in: visible, edge: .right, thickness: 200).maxX == visible.maxX - StripGeometry.margin)
+        #expect(StripGeometry.shownFrame(in: visible, edge: .right, thickness: 200).maxX == visible.maxX - StripGeometry.edgeMargin)
         #expect(StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .right, thickness: 200).minX == visible.minX)
         // 画面座標は左下が原点。上の辺は maxY（メニューバーのすぐ下）、下の辺は minY（Dock のすぐ上）
-        #expect(StripGeometry.shownFrame(in: visible, edge: .top, thickness: 48).maxY == visible.maxY - StripGeometry.margin)
+        #expect(StripGeometry.shownFrame(in: visible, edge: .top, thickness: 48).maxY == visible.maxY - StripGeometry.edgeMargin)
         #expect(StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .top, thickness: 48).minY == visible.minY)
-        #expect(StripGeometry.shownFrame(in: visible, edge: .bottom, thickness: 48).minY == visible.minY + StripGeometry.margin)
+        #expect(StripGeometry.shownFrame(in: visible, edge: .bottom, thickness: 48).minY == visible.minY + StripGeometry.edgeMargin)
         #expect(StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .bottom, thickness: 48).maxY == visible.maxY)
     }
 
@@ -201,7 +200,7 @@ struct StripTests {
 
     @Test("上下に出したときの厚みは、行の描き方で決まる（幅の設定は使わない）")
     func barThickness() {
-        var settings = StripSettings(mode: .alwaysShown, itemSize: .list, visibleCount: 8, displays: .all, stripWidth: 300)
+        var settings = StripSettings(mode: .alwaysShown, itemSize: .list, displays: .all, stripWidth: 300)
         #expect(settings.effectiveThickness == 300)
         settings.edge = .bottom
         #expect(settings.effectiveThickness == StripRowSizing.barThickness(kind: .list(.small)))
@@ -223,17 +222,35 @@ struct StripTests {
     func barItemWidth() {
         let range = StripRowSizing.tabWidthRange(for: .small)
         // 少ないときは上限の幅
-        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 2, trailing: 0) == range.upperBound)
+        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 2) == range.upperBound)
         // 多いときは同じ幅で分ける（間の 4pt を除く）
-        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 6, trailing: 0) == 163)
+        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 6) == 163)
         // 収まらないほど多いときは下限の幅（スクロールする）
-        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 20, trailing: 0) == range.lowerBound)
-        // 後ろに並べるものの分を除く
-        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 6, trailing: 40) == 156)
+        #expect(StripRowSizing.barItemWidth(kind: .list(.small), available: 1000, count: 20) == range.lowerBound)
         // 大きいほど、タブも広い
-        #expect(StripRowSizing.barItemWidth(kind: .list(.large), available: 1000, count: 20, trailing: 0) > range.lowerBound)
+        #expect(StripRowSizing.barItemWidth(kind: .list(.large), available: 1000, count: 20) > range.lowerBound)
         // アイコン・サムネイルは決まった幅
-        #expect(StripRowSizing.barItemWidth(kind: .thumbnail(.small), available: 1000, count: 20, trailing: 0) == 150)
+        #expect(StripRowSizing.barItemWidth(kind: .thumbnail(.small), available: 1000, count: 20) == 150)
+    }
+
+    @Test("ステージとの間は設定で変えられる（初期設定は 8pt。範囲に収める。保存して読み戻せる）")
+    func stageGapSetting() throws {
+        let suite = "PinstageTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var settings = StripSettings(defaults: defaults)
+        #expect(settings.stageGap == 8)
+        settings.stageGap = 100
+        #expect(settings.stageGap == StripGeometry.stageGapRange.upperBound)
+        settings.stageGap = 4
+        settings.save(to: defaults)
+        #expect(StripSettings(defaults: defaults).stageGap == 4)
+        // ステージは、ウインドウバーの横から、その間だけ空けた位置から
+        let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        let strip = StripGeometry.shownFrame(in: visible, edge: .left, thickness: 200)
+        #expect(strip.minX == visible.minX)
+        #expect(StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .left, thickness: 200, gap: 4).minX == strip.maxX + 4)
+        #expect(StripGeometry.stageFrame(in: visible, mode: .alwaysShown, edge: .left, thickness: 200, gap: 0).minX == strip.maxX)
     }
 
     @Test("位置は保存して読み戻せる（初期設定は左）")
@@ -285,13 +302,7 @@ struct StripTests {
         settings.itemSize = .grid
         settings.iconSize = .small
         #expect(StripGeometry.width(forPointerX: 20, in: visible, edge: .left, range: settings.widthRange) == StripIconSize.small.minimumStripWidth)
-        #expect(StripGeometry.width(forPointerX: 108, in: visible, edge: .left, range: settings.widthRange) == 100)
-    }
-
-    @Test("並べる数は範囲の中に収める")
-    func visibleCount() {
-        #expect(StripSettings(mode: .autoHide, itemSize: .list, visibleCount: 0, displays: .all).visibleCount == 3)
-        #expect(StripSettings(mode: .autoHide, itemSize: .list, visibleCount: 99, displays: .all).visibleCount == 30)
+        #expect(StripGeometry.width(forPointerX: 100 + StripGeometry.edgeMargin, in: visible, edge: .left, range: settings.widthRange) == 100)
     }
 
     @Test("座標の向きを変換して、元に戻せる")
@@ -301,26 +312,6 @@ struct StripTests {
         #expect(ax == CGRect(x: 10, y: 600, width: 200, height: 300))
         // 向きを折り返すだけなので、もう一度かけると元に戻る
         #expect(ScreenCoordinates.toAccessibility(ax, primaryScreenHeight: 1000) == rect)
-    }
-}
-
-@Suite("グループのアプリを終了")
-struct GroupQuitTests {
-    @Test("同じアプリは 1 回だけ、Finder は終了しない")
-    func bundleIDs() {
-        let group = StageGroup(
-            name: "開発",
-            members: [
-                WindowSignature(bundleID: "com.apple.Safari", title: "a"),
-                WindowSignature(bundleID: "com.apple.finder", title: "b"),
-                WindowSignature(bundleID: "com.apple.Safari", title: "c"),
-                WindowSignature(bundleID: "com.microsoft.VSCode", title: "d"),
-            ],
-            layout: .builtIn(.auto),
-            hasGap: false,
-            displayID: nil
-        )
-        #expect(group.bundleIDsToQuit == ["com.apple.Safari", "com.microsoft.VSCode"])
     }
 }
 
@@ -360,8 +351,8 @@ struct PinstageURLTests {
 
 @Suite("グループを名前で探す")
 struct GroupLookupTests {
-    let dev = StageGroup(name: "開発", members: [], layout: .builtIn(.auto), hasGap: false, displayID: nil)
-    let docs = StageGroup(name: "Docs", members: [], layout: .builtIn(.auto), hasGap: false, displayID: nil)
+    let dev = StageGroup(name: "開発", members: [], layout: .builtIn(.auto), displayID: nil)
+    let docs = StageGroup(name: "Docs", members: [], layout: .builtIn(.auto), displayID: nil)
 
     @Test("ID・ぴったり同じ名前・違いを除いて同じ名前の順に探す")
     func lookup() {
@@ -405,8 +396,8 @@ struct GroupMemberEditingTests {
     let code = WindowSignature(bundleID: "com.microsoft.VSCode", title: "app")
 
     func library() -> (StageLibrary, UUID, UUID) {
-        let dev = StageGroup(name: "開発", members: [safari], layout: .builtIn(.auto), hasGap: false, displayID: nil)
-        let docs = StageGroup(name: "資料", members: [code], layout: .builtIn(.auto), hasGap: false, displayID: nil)
+        let dev = StageGroup(name: "開発", members: [safari], layout: .builtIn(.auto), displayID: nil)
+        let docs = StageGroup(name: "資料", members: [code], layout: .builtIn(.auto), displayID: nil)
         return (StageLibrary(groups: [dev, docs]), dev.id, docs.id)
     }
 
@@ -456,7 +447,7 @@ struct GroupMemberOrderTests {
     let c = WindowSignature(bundleID: "c", title: "")
 
     func library() -> (StageLibrary, UUID) {
-        let group = StageGroup(name: "g", members: [a, b, c], layout: .builtIn(.auto), hasGap: false, displayID: nil)
+        let group = StageGroup(name: "g", members: [a, b, c], layout: .builtIn(.auto), displayID: nil)
         return (StageLibrary(groups: [group]), group.id)
     }
 
@@ -490,10 +481,10 @@ struct GroupMemberOrderTests {
 
 @Suite("ディスプレイごとのグループ")
 struct GroupsPerDisplayTests {
-    let left = StageGroup(name: "左", members: [], layout: .builtIn(.auto), hasGap: false, displayID: "LEFT")
-    let right = StageGroup(name: "右", members: [], layout: .builtIn(.auto), hasGap: false, displayID: "RIGHT")
-    let any = StageGroup(name: "どこでも", members: [], layout: .builtIn(.auto), hasGap: false, displayID: nil)
-    let gone = StageGroup(name: "外したディスプレイ", members: [], layout: .builtIn(.auto), hasGap: false, displayID: "GONE")
+    let left = StageGroup(name: "左", members: [], layout: .builtIn(.auto), displayID: "LEFT")
+    let right = StageGroup(name: "右", members: [], layout: .builtIn(.auto), displayID: "RIGHT")
+    let any = StageGroup(name: "どこでも", members: [], layout: .builtIn(.auto), displayID: nil)
+    let gone = StageGroup(name: "外したディスプレイ", members: [], layout: .builtIn(.auto), displayID: "GONE")
 
     var library: StageLibrary { StageLibrary(groups: [left, right, any, gone]) }
 
@@ -526,8 +517,6 @@ struct RecordedArrangementTests {
         }
         let restored = slots.map { $0.rect(in: stage) }
         #expect(restored == frames)
-        #expect(choice.hasOwnSpacing)
-        #expect(!LayoutChoice.builtIn(.auto).hasOwnSpacing)
     }
 
     @Test("保存して読み戻せる（前の版の保存も読める）")
@@ -543,7 +532,7 @@ struct RecordedArrangementTests {
     @Test("グループの見本は、記録した枠で描く")
     func preview() {
         let slots = [UnitRect(x: 0, y: 0, width: 0.5, height: 0.5), UnitRect(x: 0.3, y: 0.3, width: 0.6, height: 0.6)]
-        let preview = GroupPreview.slots(count: 2, layout: .recorded(slots), hasGap: false, customLayouts: [])
+        let preview = GroupPreview.slots(count: 2, layout: .recorded(slots), customLayouts: [])
         #expect(preview == slots)
     }
 

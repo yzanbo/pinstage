@@ -72,12 +72,20 @@ public enum LayoutEditing {
         public let slots: [UnitRect]
     }
 
+    /// ひな形。前の 5 つは、用意した並べ方（LayoutKind）と同じ形・同じ順番・同じ名前（「自動」は枚数で形が変わるので除く）。
+    /// 最後の「重ねる」は、型でしか作れない形
     public static let templates: [Template] = [
-        Template(id: "halves", title: "左右に半分", slots: [
+        Template(id: "columns", title: LayoutKind.columns.title, slots: [
             UnitRect(x: 0, y: 0, width: 0.5, height: 1),
             UnitRect(x: 0.5, y: 0, width: 0.5, height: 1),
         ]),
-        Template(id: "mainLeft", title: "左1つ＋右2つ", slots: [
+        Template(id: "rows", title: LayoutKind.rows.title, slots: [
+            UnitRect(x: 0, y: 0, width: 1, height: 0.5),
+            UnitRect(x: 0, y: 0.5, width: 1, height: 0.5),
+        ]),
+        Template(id: "quarters", title: LayoutKind.quarters.title, slots: grid(columns: 2, rows: 2)),
+        Template(id: "sixths", title: LayoutKind.sixths.title, slots: grid(columns: 3, rows: 2)),
+        Template(id: "mainLeft", title: LayoutKind.mainLeft.title, slots: [
             UnitRect(x: 0, y: 0, width: 0.6, height: 1),
             UnitRect(x: 0.6, y: 0, width: 0.4, height: 0.5),
             UnitRect(x: 0.6, y: 0.5, width: 0.4, height: 0.5),
@@ -86,10 +94,13 @@ public enum LayoutEditing {
             UnitRect(x: 0.05, y: 0.08, width: 0.6, height: 0.7),
             UnitRect(x: 0.3, y: 0.2, width: 0.6, height: 0.7),
         ]),
-        Template(id: "margins", title: "余白あり", slots: [
-            UnitRect(x: 0.04, y: 0.06, width: 0.44, height: 0.88),
-            UnitRect(x: 0.52, y: 0.06, width: 0.44, height: 0.4),
-            UnitRect(x: 0.52, y: 0.52, width: 0.44, height: 0.42),
-        ]),
     ]
+
+    /// 同じ大きさの枠を、左上から右へ、上から下へ並べる
+    private static func grid(columns: Int, rows: Int) -> [UnitRect] {
+        let width = 1 / Double(columns), height = 1 / Double(rows)
+        return (0..<(columns * rows)).map { index in
+            UnitRect(x: Double(index % columns) * width, y: Double(index / columns) * height, width: width, height: height)
+        }
+    }
 }

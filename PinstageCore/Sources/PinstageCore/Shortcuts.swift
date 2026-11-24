@@ -81,7 +81,7 @@ public enum ShortcutAction: String, CaseIterable, Codable, Sendable, Identifiabl
     public var title: String {
         switch self {
         case .search: "ウインドウ・グループを検索"
-        case .toggleStrip: "ストリップを出す・隠す"
+        case .toggleStrip: "ウインドウバーを出す・隠す"
         case .saveStageAsGroup: "ステージをグループとして保存"
         case .recordScreenAsGroup: "見えている画面をグループとして記録"
         case .nextGroup: "次のグループを呼び出す"

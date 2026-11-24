@@ -9,7 +9,7 @@ struct StageLibraryGroupTests {
     private let notes = WindowSignature(bundleID: "com.apple.Notes", title: "メモ")
 
     private func content(_ members: [WindowSignature], layout: LayoutChoice = .builtIn(.auto)) -> StageGroup.Content {
-        StageGroup.Content(members: members, layout: layout, hasGap: false, displayID: "D1")
+        StageGroup.Content(members: members, layout: layout, displayID: "D1")
     }
 
     @Test("グループを足す。名前が空なら仮の名前、あれば前後の空白を除く")
@@ -30,7 +30,7 @@ struct StageLibraryGroupTests {
         var library = StageLibrary()
         let first = library.addGroup(name: "開発", content: content([safari]))
         let second = library.addGroup(name: "資料", content: content([notes]))
-        let recorded = StageGroup.Content(members: [notes, safari], layout: .recorded([]), hasGap: false, displayID: "D2")
+        let recorded = StageGroup.Content(members: [notes, safari], layout: .recorded([]), displayID: "D2")
         let replaced = library.setContent(recorded, ofGroup: first.id)
         #expect(replaced)
         #expect(library.groups.map(\.name) == ["開発", "資料"])
@@ -53,7 +53,7 @@ struct StageLibraryGroupTests {
         group.name = "資料作り"
         library.updateGroup(group)
         #expect(library.groups[0].name == "資料作り")
-        let unknown = library.updateGroup(StageGroup(name: "ない", members: [], layout: .builtIn(.auto), hasGap: false, displayID: nil))
+        let unknown = library.updateGroup(StageGroup(name: "ない", members: [], layout: .builtIn(.auto), displayID: nil))
         #expect(!unknown)
     }
 
@@ -124,13 +124,13 @@ struct StageLibraryLayoutTests {
         #expect(library.customLayouts[0].name == "左右")
     }
 
-    @Test("型を消すと、その型を使っていたグループは「自動（均等）」になる")
+    @Test("型を消すと、その型を使っていたグループは「自動」になる")
     func removeCustomLayout() {
         var library = StageLibrary()
         let layout = library.addCustomLayout(slots: [slot])
         let member = WindowSignature(bundleID: "com.apple.Safari", title: "")
-        library.addGroup(name: "型を使う", content: StageGroup.Content(members: [member], layout: .custom(layout.id), hasGap: false, displayID: nil))
-        library.addGroup(name: "使わない", content: StageGroup.Content(members: [member], layout: .builtIn(.rows), hasGap: false, displayID: nil))
+        library.addGroup(name: "型を使う", content: StageGroup.Content(members: [member], layout: .custom(layout.id), displayID: nil))
+        library.addGroup(name: "使わない", content: StageGroup.Content(members: [member], layout: .builtIn(.rows), displayID: nil))
         library.removeCustomLayout(layout.id)
         #expect(library.customLayouts.isEmpty)
         #expect(library.groups.map(\.layout) == [.builtIn(.auto), .builtIn(.rows)])
@@ -142,24 +142,24 @@ struct LayoutChoiceTests {
     private let area = CGRect(x: 100, y: 50, width: 1200, height: 800)
     private let custom = CustomLayout(name: "左右", slots: [UnitRect(x: 0, y: 0, width: 0.4, height: 1), UnitRect(x: 0.4, y: 0, width: 0.6, height: 1)])
 
-    @Test("用意した型は、型の計算のとおり（余白も）")
+    @Test("用意した型は、型の計算のとおり")
     func builtIn() {
-        let frames = LayoutChoice.builtIn(.mainLeft).frames(count: 3, in: area, gap: 16, customLayouts: [])
-        #expect(frames == StageLayout.frames(count: 3, in: area, kind: .mainLeft, gap: 16))
+        let frames = LayoutChoice.builtIn(.mainLeft).frames(count: 3, in: area, customLayouts: [])
+        #expect(frames == StageLayout.frames(count: 3, in: area, kind: .mainLeft))
     }
 
-    @Test("登録した型・記録した配置は、その枠のとおり（余白は使わない）")
+    @Test("登録した型・記録した配置は、その枠のとおり")
     func ownSlots() {
         let expected = custom.frames(count: 2, in: area)
-        #expect(LayoutChoice.custom(custom.id).frames(count: 2, in: area, gap: 16, customLayouts: [custom]) == expected)
-        #expect(LayoutChoice.recorded(custom.slots).frames(count: 2, in: area, gap: 16, customLayouts: []) == expected)
-        // 枠より多いウインドウは「重ねる」で置く（登録した型と同じ）
-        #expect(LayoutChoice.recorded(custom.slots).frames(count: 3, in: area, gap: 0, customLayouts: []) == custom.frames(count: 3, in: area))
+        #expect(LayoutChoice.custom(custom.id).frames(count: 2, in: area, customLayouts: [custom]) == expected)
+        #expect(LayoutChoice.recorded(custom.slots).frames(count: 2, in: area, customLayouts: []) == expected)
+        // 枠より多いウインドウは、ずらして重ねて置く（登録した型と同じ）
+        #expect(LayoutChoice.recorded(custom.slots).frames(count: 3, in: area, customLayouts: []) == custom.frames(count: 3, in: area))
     }
 
-    @Test("消した型は「自動（均等）」で並べる")
+    @Test("消した型は「自動」で並べる")
     func missingCustom() {
-        let frames = LayoutChoice.custom(UUID()).frames(count: 2, in: area, gap: 16, customLayouts: [custom])
+        let frames = LayoutChoice.custom(UUID()).frames(count: 2, in: area, customLayouts: [custom])
         #expect(frames == StageLayout.frames(count: 2, in: area, kind: .auto))
     }
 
@@ -167,14 +167,15 @@ struct LayoutChoiceTests {
     func title() {
         #expect(LayoutChoice.builtIn(.rows).title(customLayouts: []) == "上下に並べる")
         #expect(LayoutChoice.custom(custom.id).title(customLayouts: [custom]) == "左右")
-        #expect(LayoutChoice.custom(custom.id).title(customLayouts: []) == "自動（均等）")
+        #expect(LayoutChoice.custom(custom.id).title(customLayouts: []) == "自動（枚数に合わせる）")
         #expect(LayoutChoice.recorded([]).title(customLayouts: []) == "記録した配置")
     }
 
-    @Test("1 枚だけのとき、大きさを変えないのは、用意した型の「重ねる」以外だけ")
+    @Test("1 枚だけのとき、大きさを変えないのは、用意した型だけ")
     func resizesSingleWindow() {
-        #expect(!LayoutChoice.builtIn(.auto).resizesSingleWindow)
-        #expect(LayoutChoice.builtIn(.cascade).resizesSingleWindow)
+        for kind in LayoutKind.allCases {
+            #expect(!LayoutChoice.builtIn(kind).resizesSingleWindow)
+        }
         #expect(LayoutChoice.custom(custom.id).resizesSingleWindow)
         #expect(LayoutChoice.recorded([]).resizesSingleWindow)
     }

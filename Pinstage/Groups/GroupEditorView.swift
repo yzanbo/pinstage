@@ -2,7 +2,7 @@ import AppKit
 import PinstageCore
 import SwiftUI
 
-/// グループの編集画面（名前・中身・並べ方・余白・出すディスプレイ）
+/// グループの編集画面（名前・中身・並べ方・出すディスプレイ）
 ///
 /// 中身の並び順は、並べたときの順番（後ろほど前面。型の枠の番号と同じ）。
 struct GroupEditorView: View {
@@ -16,10 +16,6 @@ struct GroupEditorView: View {
         self.stage = stage
         self.onSave = onSave
         self.onCancel = onCancel
-    }
-
-    private var isCustom: Bool {
-        group.layout.hasOwnSpacing
     }
 
     /// 足せるウインドウ（いま開いていて、まだ中身に入っていないもの）
@@ -123,7 +119,7 @@ struct GroupEditorView: View {
         }
     }
 
-    /// 並べ方・余白・出すディスプレイ
+    /// 並べ方・出すディスプレイ
     private var layoutControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("並べ方", selection: $group.layout) {
@@ -142,9 +138,6 @@ struct GroupEditorView: View {
                     Text(LayoutChoice.recordedTitle).tag(group.layout)
                 }
             }
-            Toggle("余白を空ける", isOn: $group.hasGap)
-                .toggleStyle(.checkbox)
-                .disabled(isCustom)
             Picker("ディスプレイ", selection: $group.displayID) {
                 Text("ポインタのあるディスプレイ").tag(String?.none)
                 ForEach(NSScreen.screens, id: \.displayUUID) { screen in

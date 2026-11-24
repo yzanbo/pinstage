@@ -75,17 +75,15 @@ public struct StripSettings: Equatable, Sendable {
     public var itemSize: StripItemSize
     /// 大きさ（どの形式にもかかる）
     public var iconSize: StripIconSize
-    /// ストリップに並べるウインドウの数（新しく開いた順。残りは「ほかのウインドウ」にたたむ）
-    public var visibleCount: Int {
-        didSet { visibleCount = Self.clampedCount(visibleCount) }
-    }
     public var displays: StripDisplays
-    /// ほかのデスクトップ（操作スペース）のウインドウも出すか。オフなら、いま見ているデスクトップのウインドウだけを出す
-    public var showsOtherSpaces: Bool
-    /// ほかのディスプレイのウインドウも出すか。オフなら、ストリップのあるディスプレイのウインドウだけを出す（ストリップが 1 つのときはすべて）
-    public var showsOtherDisplays: Bool
     /// 常に出しているときに、ウインドウをストリップに重ねない（重なったら、ステージの範囲に収める）
     public var keepsWindowsOffStrip: Bool
+    /// ウインドウバーとステージとの間（pt。常に出すとき）
+    public var stageGap: CGFloat {
+        didSet { stageGap = Self.clampedGap(stageGap) }
+    }
+    /// 同じアプリのウインドウを、いつもまとめて並べるか（オフなら、新しく開いたものを同じアプリの後ろに入れるだけで、ドラッグで離せる）
+    public var groupsSameApp: Bool
     /// 左右に出したときのストリップの幅（pt。ステージの側の縁をドラッグして変える）。一覧・サムネイルの幅
     public var stripWidth: CGFloat {
         didSet { stripWidth = StripGeometry.clampedWidth(stripWidth) }
@@ -95,11 +93,9 @@ public struct StripSettings: Equatable, Sendable {
         didSet { gridWidth = Self.clampedGridWidth(gridWidth) }
     }
 
-    public static let visibleCountRange = 3...30
     public static let `default` = StripSettings(
         mode: .alwaysShown,
         itemSize: .list,
-        visibleCount: 8,
         displays: .all,
         stripWidth: StripGeometry.defaultWidth
     )
@@ -107,26 +103,24 @@ public struct StripSettings: Equatable, Sendable {
     public init(
         mode: StripMode,
         itemSize: StripItemSize,
-        visibleCount: Int,
         displays: StripDisplays,
         stripWidth: CGFloat = StripGeometry.defaultWidth,
-        showsOtherSpaces: Bool = false,
-        showsOtherDisplays: Bool = false,
         keepsWindowsOffStrip: Bool = true,
         edge: StripEdge = .left,
         iconSize: StripIconSize = .small,
-        gridWidth: CGFloat = StripGeometry.defaultWidth
+        gridWidth: CGFloat = StripGeometry.defaultWidth,
+        groupsSameApp: Bool = true,
+        stageGap: CGFloat = StripGeometry.stageGap
     ) {
+        self.groupsSameApp = groupsSameApp
+        self.stageGap = Self.clampedGap(stageGap)
         self.mode = mode
         self.edge = edge
         self.itemSize = itemSize
         self.iconSize = iconSize
-        self.visibleCount = Self.clampedCount(visibleCount)
         self.displays = displays
         self.stripWidth = StripGeometry.clampedWidth(stripWidth)
         self.gridWidth = Self.clampedGridWidth(gridWidth)
-        self.showsOtherSpaces = showsOtherSpaces
-        self.showsOtherDisplays = showsOtherDisplays
         self.keepsWindowsOffStrip = keepsWindowsOffStrip
     }
 
@@ -170,8 +164,8 @@ public struct StripSettings: Equatable, Sendable {
         edge.isHorizontal ? StripRowSizing.barThickness(kind: rowKind) : width
     }
 
-    private static func clampedCount(_ count: Int) -> Int {
-        min(max(count, visibleCountRange.lowerBound), visibleCountRange.upperBound)
+    private static func clampedGap(_ gap: CGFloat) -> CGFloat {
+        min(max(gap, StripGeometry.stageGapRange.lowerBound), StripGeometry.stageGapRange.upperBound)
     }
 
     /// アイコンの並びの幅を、どの大きさでも入りうる範囲に収める（大きさに合わせた下限は、width で使うときに当てる）
@@ -186,13 +180,12 @@ public struct StripSettings: Equatable, Sendable {
         static let iconSize = "strip.iconSize"
         /// 大きさを、アイコンの並びだけにかけていたときの値（読み替える）
         static let legacyGridIconSize = "strip.gridIconSize"
-        static let visibleCount = "strip.visibleCount"
         static let displays = "strip.displays"
         static let stripWidth = "strip.width"
         static let gridWidth = "strip.gridWidth"
-        static let showsOtherSpaces = "strip.showsOtherSpaces"
-        static let showsOtherDisplays = "strip.showsOtherDisplays"
         static let keepsWindowsOffStrip = "strip.keepsWindowsOffStrip"
+        static let groupsSameApp = "strip.groupsSameApp"
+        static let stageGap = "strip.stageGap"
     }
 
     /// 保存した設定を読む（なければ初期設定）
@@ -201,16 +194,15 @@ public struct StripSettings: Equatable, Sendable {
         self.init(
             mode: defaults.string(forKey: Key.mode).flatMap(StripMode.init(rawValue:)) ?? fallback.mode,
             itemSize: defaults.string(forKey: Key.itemSize).flatMap(StripItemSize.init(storedValue:)) ?? fallback.itemSize,
-            visibleCount: defaults.object(forKey: Key.visibleCount) as? Int ?? fallback.visibleCount,
             displays: defaults.string(forKey: Key.displays).flatMap(StripDisplays.init(rawValue:)) ?? fallback.displays,
             stripWidth: (defaults.object(forKey: Key.stripWidth) as? Double).map { CGFloat($0) } ?? fallback.stripWidth,
-            showsOtherSpaces: defaults.object(forKey: Key.showsOtherSpaces) as? Bool ?? fallback.showsOtherSpaces,
-            showsOtherDisplays: defaults.object(forKey: Key.showsOtherDisplays) as? Bool ?? fallback.showsOtherDisplays,
             keepsWindowsOffStrip: defaults.object(forKey: Key.keepsWindowsOffStrip) as? Bool ?? fallback.keepsWindowsOffStrip,
             edge: defaults.string(forKey: Key.edge).flatMap(StripEdge.init(rawValue:)) ?? fallback.edge,
             iconSize: (defaults.string(forKey: Key.iconSize) ?? defaults.string(forKey: Key.legacyGridIconSize))
                 .flatMap(StripIconSize.init(rawValue:)) ?? fallback.iconSize,
-            gridWidth: (defaults.object(forKey: Key.gridWidth) as? Double).map { CGFloat($0) } ?? fallback.gridWidth
+            gridWidth: (defaults.object(forKey: Key.gridWidth) as? Double).map { CGFloat($0) } ?? fallback.gridWidth,
+            groupsSameApp: defaults.object(forKey: Key.groupsSameApp) as? Bool ?? fallback.groupsSameApp,
+            stageGap: (defaults.object(forKey: Key.stageGap) as? Double).map { CGFloat($0) } ?? fallback.stageGap
         )
     }
 
@@ -219,24 +211,11 @@ public struct StripSettings: Equatable, Sendable {
         defaults.set(edge.rawValue, forKey: Key.edge)
         defaults.set(itemSize.rawValue, forKey: Key.itemSize)
         defaults.set(iconSize.rawValue, forKey: Key.iconSize)
-        defaults.set(visibleCount, forKey: Key.visibleCount)
         defaults.set(displays.rawValue, forKey: Key.displays)
         defaults.set(Double(stripWidth), forKey: Key.stripWidth)
         defaults.set(Double(gridWidth), forKey: Key.gridWidth)
-        defaults.set(showsOtherSpaces, forKey: Key.showsOtherSpaces)
-        defaults.set(showsOtherDisplays, forKey: Key.showsOtherDisplays)
         defaults.set(keepsWindowsOffStrip, forKey: Key.keepsWindowsOffStrip)
-    }
-}
-
-/// ストリップのウインドウの並び（一度並べた順番は変えず、新しく開いたものを先頭に足す）
-public enum RecentOrder {
-    /// いまあるものに合わせる（なくなったものは除き、新しいものは先頭に足す）
-    public static func syncing<ID: Hashable>(_ order: [ID], with current: [ID]) -> [ID] {
-        let currentSet = Set(current)
-        let kept = order.filter { currentSet.contains($0) }
-        let keptSet = Set(kept)
-        let added = current.filter { !keptSet.contains($0) }
-        return added + kept
+        defaults.set(groupsSameApp, forKey: Key.groupsSameApp)
+        defaults.set(Double(stageGap), forKey: Key.stageGap)
     }
 }

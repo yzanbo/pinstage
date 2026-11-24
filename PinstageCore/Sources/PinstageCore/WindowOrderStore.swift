@@ -19,12 +19,13 @@ public enum WindowOrderStore {
 
     /// 覚えた並び順に、いまのウインドウを並べ直した順番（current の番号の並び）
     ///
-    /// 覚えた並びに当てはまらなかったウインドウ（止めている間に開いたものなど）は、新しいものとして先頭に置く。
+    /// 覚えた並びに当てはまらなかったウインドウ（止めている間に開いたものなど）は、新しいものとして足す
+    /// （同じアプリのウインドウがあれば、そのすぐ後ろ。なければ末尾）。
     public static func restoredOrder(saved: [WindowSignature], current: [WindowSignature]) -> [Int] {
         let matches = WindowMatcher.match(saved, candidates: current, runningBundleIDs: [])
         let matched = matches.compactMap(\.windowIndex)
         let matchedSet = Set(matched)
         let unmatched = current.indices.filter { !matchedSet.contains($0) }
-        return unmatched + matched
+        return RecentOrder.appending(unmatched, to: matched) { current[$0].bundleID }
     }
 }

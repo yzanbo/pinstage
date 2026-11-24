@@ -40,12 +40,13 @@ struct GroupSection: View {
         }
     }
 
-    /// 上下に出したとき: グループを横に並べる（グループがなければ、何も出さない。多いときは、この欄だけ横にスクロール）
+    /// 上下に出したとき: グループを作る ＋ と、グループを横に並べる（多いときは、この欄だけ横にスクロール）
     @ViewBuilder
     private var bar: some View {
         let visible = stage.groups(on: strip.screen)
+        BarDivider()
+        GroupAddButton(stage: stage, screen: strip.screen)
         if !visible.isEmpty {
-            BarDivider()
             ScrollView(.horizontal) {
                 HStack(spacing: 6) {
                     rows(visible)
@@ -72,14 +73,20 @@ struct GroupSection: View {
             // このディスプレイのストリップに並べるグループ（並び順は全体のまま）
             let visible = stage.groups(on: strip.screen)
             if !isIconOnly {
-                SectionHeader(title: "グループ", count: visible.count)
-            } else if !visible.isEmpty {
+                // 見出しの右の ＋ で、グループを作る（ステージを保存・見えている画面を記録）
+                HStack(spacing: 0) {
+                    SectionHeader(title: "グループ", count: visible.count)
+                    GroupAddButton(stage: stage, screen: strip.screen)
+                }
+            } else {
                 Divider().padding(.horizontal, 6)
+                GroupAddButton(stage: stage, screen: strip.screen)
+                    .frame(maxWidth: .infinity)
             }
             if visible.isEmpty, !isIconOnly {
                 Text(stage.library.groups.isEmpty
-                    ? "ステージに出した組み合わせを「グループとして保存」すると、ここに並びます"
-                    : "このディスプレイのグループはありません。ここで「グループとして保存」すると、このディスプレイのグループになります")
+                    ? "ステージに出したウインドウを、見出しの ＋ から「ステージをグループとして保存」すると、ここに並びます"
+                    : "このディスプレイのグループはありません。ここで ＋ から保存すると、このディスプレイのグループになります")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -172,6 +179,7 @@ private struct GroupRow: View {
                     stage.renameGroup(group.id, to: name)
                 }
             }
+            layoutMenu
             Button("いまのステージで上書き保存") { stage.overwriteGroup(group.id, on: screen) }
                 .disabled(stage.stage(on: screen).selection.isEmpty)
             Button("見えている画面で上書き記録") { stage.rerecordGroup(group.id, on: screen) }
@@ -180,9 +188,6 @@ private struct GroupRow: View {
                 .disabled(position == 0)
             Button(strip.isHorizontal ? "右へ" : "下へ") { stage.moveGroup(from: position, dropIndex: position + 2, on: screen) }
                 .disabled(position == visibleCount - 1)
-            Divider()
-            Button("グループのアプリを終了…") { stage.quitApps(of: group) }
-                .disabled(!group.bundleIDsToQuit.contains(where: running.contains))
             Divider()
             Button("削除", role: .destructive) { stage.deleteGroup(group.id) }
         }
@@ -276,6 +281,15 @@ private struct GroupRow: View {
     /// 横長の帯での、名前の幅の上限と、見本を出すときの行の幅
     private static let barNameWidth: CGFloat = 120
     private static let barMapWidth: CGFloat = 150
+
+    /// 並べ方を選ぶメニュー（選ぶと、このグループの並べ方として保存し、すぐステージに映す。出したままなら並び直し、出していなければ呼び出す）
+    private var layoutMenu: some View {
+        Menu("並べ方") {
+            LayoutChoiceItems(current: group.layout, customLayouts: stage.library.customLayouts) { choice in
+                stage.setLayout(choice, ofGroup: group.id, fallback: screen)
+            }
+        }
+    }
 
     /// ウインドウ・ほかのグループの中身を、このグループに重ねているか
     private var isDropTarget: Bool {

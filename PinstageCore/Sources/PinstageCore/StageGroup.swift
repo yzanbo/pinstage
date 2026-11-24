@@ -9,8 +9,6 @@ public struct StageGroup: Codable, Equatable, Identifiable, Sendable {
     /// 出す順番に並べたウインドウ（後ろほど前面）
     public var members: [WindowSignature]
     public var layout: LayoutChoice
-    /// 間を空けて並べるか（登録した型には使わない。型そのものに間が入っているため）
-    public var hasGap: Bool
     /// 出すディスプレイ（ディスプレイの UUID）。つながっていなければ、ストリップのあるディスプレイに出す
     public var displayID: String?
 
@@ -19,14 +17,12 @@ public struct StageGroup: Codable, Equatable, Identifiable, Sendable {
         name: String,
         members: [WindowSignature],
         layout: LayoutChoice,
-        hasGap: Bool,
         displayID: String?
     ) {
         self.id = id
         self.name = name
         self.members = members
         self.layout = layout
-        self.hasGap = hasGap
         self.displayID = displayID
     }
 }
@@ -98,35 +94,24 @@ extension StageGroup {
     public struct Content: Equatable, Sendable {
         public var members: [WindowSignature]
         public var layout: LayoutChoice
-        public var hasGap: Bool
         public var displayID: String?
 
-        public init(members: [WindowSignature], layout: LayoutChoice, hasGap: Bool, displayID: String?) {
+        public init(members: [WindowSignature], layout: LayoutChoice, displayID: String?) {
             self.members = members
             self.layout = layout
-            self.hasGap = hasGap
             self.displayID = displayID
         }
     }
 
     public var content: Content {
-        get { Content(members: members, layout: layout, hasGap: hasGap, displayID: displayID) }
+        get { Content(members: members, layout: layout, displayID: displayID) }
         set {
             members = newValue.members
             layout = newValue.layout
-            hasGap = newValue.hasGap
             displayID = newValue.displayID
         }
     }
 
-    /// 終了しないアプリ（終了してもすぐ起動し直すもの）
-    public static let appsNeverQuit: Set<String> = ["com.apple.finder"]
-
-    /// 「グループのアプリを終了」で終了するアプリ（同じアプリは 1 回だけ。グループの順番のまま。Finder は除く）
-    public var bundleIDsToQuit: [String] {
-        var seen = Set<String>()
-        return members.map(\.bundleID).filter { !Self.appsNeverQuit.contains($0) && seen.insert($0).inserted }
-    }
 }
 
 extension StageLibrary {
@@ -149,7 +134,6 @@ extension StageLibrary {
             name: name.flatMap(GroupNaming.normalized) ?? GroupNaming.nextName(existing: groups.map(\.name)),
             members: content.members,
             layout: content.layout,
-            hasGap: content.hasGap,
             displayID: content.displayID
         )
         groups.append(group)
@@ -229,7 +213,7 @@ extension StageLibrary {
         return true
     }
 
-    /// 型を消す。その型を使っていたグループは「自動（均等）」にする
+    /// 型を消す。その型を使っていたグループは「自動」にする
     public mutating func removeCustomLayout(_ id: UUID) {
         customLayouts.removeAll { $0.id == id }
         for index in groups.indices where groups[index].layout == .custom(id) {
