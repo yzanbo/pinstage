@@ -330,6 +330,8 @@ final class StripManager {
         }
         // ステージの範囲が変わったので、並べているウインドウを並べ直す（常に出すときだけ、ストリップの幅でステージが変わる）
         if new.mode != old.mode || (new.mode == .alwaysShown && new.effectiveWidth != old.effectiveWidth) {
+            // 狭めたときは、ストリップの横にくっつけていたウインドウも、新しい幅まで広げる
+            stage.followNarrowedStrip(from: old)
             stage.reapplyAllStages()
             // ストリップの後ろに入り込ませない範囲も変わったので、すぐ読み直して、後ろに残ったウインドウを押し出す
             // （読み直すと StripAvoider が確かめる。待つと、次の読み直しまで最大 1.5 秒かかる）

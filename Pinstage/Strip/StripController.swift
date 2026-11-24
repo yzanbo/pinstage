@@ -121,7 +121,7 @@ final class StripController {
         assumedHereUntil = ProcessInfo.processInfo.systemUptime + DesktopAttribution.newStripGrace
         placePanel(shown: stage.stripSettings.mode == .alwaysShown, animated: false)
         pointerTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.trackPointer() }
+            MainActor.assumeIsolated { self?.tick() }
         }
     }
 
@@ -156,6 +156,20 @@ final class StripController {
             autoHide.reset()
         }
         placePanel(shown: shown, animated: true)
+    }
+
+    /// 0.1 秒ごとに確かめること
+    private func tick() {
+        finishResizeIfReleased()
+        trackPointer()
+    }
+
+    /// 右の縁のドラッグを離したのに、終わりの知らせが届かなかったとき（ドラッグの途中でストリップの形が変わると、届かないことがある）は、
+    /// ここで幅を決める（決めないと、見た目の幅だけが変わり、ステージの範囲は前の幅のまま残る）
+    private func finishResizeIfReleased() {
+        guard resizingWidth != nil, NSEvent.pressedMouseButtons == 0 else { return }
+        DesktopTrace.log("ストリップの幅", "ドラッグの終わりの知らせが届かなかったので、ここで決める")
+        endResize()
     }
 
     /// 自動で隠すとき、ポインタの位置で出す・隠す
@@ -195,6 +209,7 @@ final class StripController {
         isDragging = false
         guard let width = resizingWidth else { return }
         resizingWidth = nil
+        DesktopTrace.log("ストリップの幅", "決めた: \(Int(width))")
         stage.stripSettings.stripWidth = width
     }
 

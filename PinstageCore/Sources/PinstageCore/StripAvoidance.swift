@@ -18,6 +18,13 @@ public enum StripAvoidance {
         let fitted = StageLayout.fit(frame, into: stage)
         return fitted == frame ? nil : fitted
     }
+
+    /// ストリップを狭めてステージの左端が左へ動いたとき、前の左端にくっつけていたウインドウを、新しい左端まで広げた枠（右端はそのまま）。
+    /// くっついていなかったウインドウ・左端が左へ動いていないときは nil（動かさない）
+    public static func following(_ frame: CGRect, stageLeftFrom oldLeft: CGFloat, to newLeft: CGFloat) -> CGRect? {
+        guard newLeft < oldLeft, abs(frame.minX - oldLeft) <= tolerance else { return nil }
+        return CGRect(x: newLeft, y: frame.minY, width: frame.maxX - newLeft, height: frame.height)
+    }
 }
 
 extension StripAvoidance {

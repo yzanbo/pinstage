@@ -349,14 +349,36 @@ final class StageController {
     }
 
     /// ステージの範囲（アクセシビリティの座標）。ストリップを出しているディスプレイでは、ストリップの分を除く
-    func stageArea(on screen: NSScreen) -> CGRect {
+    /// - Parameter settings: この設定のときの範囲（省けば、いまの設定）
+    func stageArea(on screen: NSScreen, settings: StripSettings? = nil) -> CGRect {
+        let settings = settings ?? stripSettings
         let primaryHeight = NSScreen.primary?.frame.height ?? screen.frame.height
         let visible = screen.visibleFrame
         let hasStrip = stripScreens.contains { Self.displayKey($0) == Self.displayKey(screen) }
         let frame = hasStrip
-            ? StripGeometry.stageFrame(in: visible, mode: stripSettings.mode, width: stripSettings.effectiveWidth)
+            ? StripGeometry.stageFrame(in: visible, mode: settings.mode, width: settings.effectiveWidth)
             : visible
         return ScreenCoordinates.toAccessibility(frame, primaryScreenHeight: primaryHeight)
+    }
+
+    /// ストリップを狭めたとき、ストリップの横（前のステージの左端）にくっつけていたウインドウを、新しい左端まで広げる（右端はそのまま）。
+    /// ステージに出しているウインドウは、並べ直すので除く
+    func followNarrowedStrip(from old: StripSettings) {
+        guard old.mode == .alwaysShown, stripSettings.mode == .alwaysShown else { return }
+        let locator = DisplayLocator()
+        for screen in stripScreens {
+            let key = Self.displayKey(screen)
+            let oldLeft = stageArea(on: screen, settings: old).minX
+            let newLeft = stageArea(on: screen).minX
+            let onStage = Set(stage(on: screen).selection.members)
+            for item in windows where !item.isMinimized && currentSpaceIDs.contains(item.id) && !onStage.contains(item.id) {
+                guard let frame = AXWindow.frame(of: item.id),
+                      let widened = StripAvoidance.following(frame, stageLeftFrom: oldLeft, to: newLeft),
+                      locator.key(for: frame) == key
+                else { continue }
+                AXWindow.setFrame(item.id, pid: item.pid, to: widened)
+            }
+        }
     }
 
     /// ウインドウごとの枠（アクセシビリティの座標）

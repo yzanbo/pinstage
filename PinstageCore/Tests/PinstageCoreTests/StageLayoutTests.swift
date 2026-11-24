@@ -209,6 +209,19 @@ struct ZoomMemoryTests {
         #expect(moved.memory == .init())
     }
 
+    @Test("ストリップを狭めたら、ストリップの横にくっつけていたウインドウを、新しい幅まで広げる（右端はそのまま）")
+    func followNarrowedStrip() {
+        // ステージの左端が 246 → 176 に動いた
+        let attached = CGRect(x: 246, y: 25, width: 800, height: 600)
+        #expect(StripAvoidance.following(attached, stageLeftFrom: 246, to: 176) == CGRect(x: 176, y: 25, width: 870, height: 600))
+        // 少しのずれ（2pt まで）は、くっついているとみなす
+        #expect(StripAvoidance.following(attached.offsetBy(dx: 2, dy: 0), stageLeftFrom: 246, to: 176)?.minX == 176)
+        // 離れたところにあるウインドウは動かさない
+        #expect(StripAvoidance.following(CGRect(x: 400, y: 25, width: 800, height: 600), stageLeftFrom: 246, to: 176) == nil)
+        // 広げたとき（左端が右へ動いた）は、ここでは動かさない（重なった分は、収める処理が右へ押し出す）
+        #expect(StripAvoidance.following(CGRect(x: 176, y: 25, width: 800, height: 600), stageLeftFrom: 176, to: 246) == nil)
+    }
+
     @Test("重なっただけ（広げていない）なら、右へずらすだけで覚えない")
     func overlapOnly() {
         let window = CGRect(x: 100, y: 200, width: 600, height: 400)
