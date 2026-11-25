@@ -203,13 +203,21 @@ final class StripManager {
     /// デスクトップを足したら作り、消したら閉じる
     private func syncSpaces() {
         guard let displays = SkyLight.displays() else { return }
-        var wanted: [(screen: NSScreen, space: UInt64)] = []
+        var others: [(screen: NSScreen, space: UInt64)] = []
+        var shown: [(screen: NSScreen, space: UInt64)] = []
         for screen in stage.stripScreens {
-            let display = SkyLight.display(forKey: StageController.displayKey(screen), in: displays)
-            for space in display?.spaces ?? [] where !space.isFullScreen {
-                wanted.append((screen, space.id))
+            guard let display = SkyLight.display(forKey: StageController.displayKey(screen), in: displays) else { continue }
+            for space in display.spaces where !space.isFullScreen {
+                if space.id == display.current {
+                    shown.append((screen, space.id))
+                } else {
+                    others.append((screen, space.id))
+                }
             }
         }
+        // 表に出ているデスクトップのストリップは最後に作る（起動した Pinstage を macOS が前面にするとき、
+        // いちばん最後に出したウインドウのデスクトップへ移ってしまうため）
+        let wanted = others + shown
         // もうないデスクトップ・ストリップを出さなくなったディスプレイのストリップを閉じる
         let wantedKeys = Set(wanted.map { "\(StageController.displayKey($0.screen))#\($0.space)" })
         for strip in strips where strip.spaceID.map({ !wantedKeys.contains("\(strip.displayKey)#\($0)") }) ?? true {
