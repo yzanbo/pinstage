@@ -9,7 +9,8 @@ struct WindowSection: View {
     let stage: StageController
     let thumbnails: ThumbnailStore
     let strip: StripController
-    @State private var reorder = ReorderState()
+    /// 並べ替えの状態はウインドウバーが持つ（別のディスプレイのウインドウバーから持ってきたときも、同じ線を出すため）
+    private var reorder: ReorderState { strip.windowReorder }
     /// 一覧に使える幅（横長の帯では一覧のタブの幅、左右のアイコンの並びでは列の数を決めるのに使う）
     @State private var listWidth: CGFloat = 0
     /// 「視差効果を減らす」がオンなら、動きを付けない
@@ -60,8 +61,7 @@ struct WindowSection: View {
                         .padding(.horizontal, 6)
                 }
             }
-            .coordinateSpace(.named(ReorderState.windowSpace))
-            .overlay(alignment: .topLeading) { DropLine(reorder: reorder, count: rows.count, layout: .columns, margin: Self.dropMargin) }
+            .modifier(reorderList(rows, layout: .columns))
             .animation(listAnimation, value: rows.map(\.id))
         }
         .scrollIndicators(.never)
@@ -92,29 +92,25 @@ struct WindowSection: View {
             // 同じアプリのアイコンを枠でつなぐのに折り返しの位置が要るので、列の数は自分で決める（決まりは PinstageCore の StripRowSizing.gridLayout）
             let grid = StripRowSizing.gridLayout(width: listWidth, tileWidth: kind.size.tileWidth, spacing: spacing, sideMargin: Self.dropMargin)
             ScrollView {
-                if tiles {
-                    let arrangement = RowJoin.Arrangement.grid(columns: grid.columns)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: grid.columns), spacing: spacing) {
-                        rowViews(rows, rowHeight: rowHeight, arrangement: arrangement, spacing: spacing)
-                    }
-                    .coordinateSpace(.named(ReorderState.windowSpace))
-                    .overlay(alignment: .topLeading) { DropLine(reorder: reorder, count: rows.count, layout: ReorderLayout(arrangement), margin: Self.dropMargin) }
-                    .animation(listAnimation, value: rows.map(\.id))
-                }
-                // 行の間は、行ごとに空ける（同じアプリのウインドウは詰めてつなぐ）
-                LazyVStack(spacing: 0) {
-                    if !tiles {
-                        rowViews(rows, rowHeight: rowHeight, arrangement: .vertical, spacing: spacing)
+                VStack(spacing: 0) {
+                    if tiles {
+                        let arrangement = RowJoin.Arrangement.grid(columns: grid.columns)
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: grid.columns), spacing: spacing) {
+                            rowViews(rows, rowHeight: rowHeight, arrangement: arrangement, spacing: spacing)
+                        }
+                        .modifier(reorderList(rows, layout: ReorderLayout(arrangement)))
+                    } else {
+                        // 行の間は、行ごとに空ける（同じアプリのウインドウは詰めてつなぐ）
+                        LazyVStack(spacing: 0) {
+                            rowViews(rows, rowHeight: rowHeight, arrangement: .vertical, spacing: spacing)
+                        }
+                        .modifier(reorderList(rows, layout: .rows))
                     }
                     if rows.isEmpty, stage.isTrusted, !isIconOnly {
                         emptyMessage
                     }
                 }
                 .animation(listAnimation, value: rows.map(\.id))
-                .coordinateSpace(.named(ReorderState.windowSpace))
-                .overlay(alignment: .topLeading) {
-                    if !tiles { DropLine(reorder: reorder, count: rows.count, margin: Self.dropMargin) }
-                }
             }
             .scrollIndicators(.never)
             // いちばん上・下へドラッグしたときの線を引く余白（アイコンが複数の列のときは、左右の端の線のために、左右も空ける）
@@ -124,6 +120,11 @@ struct WindowSection: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
         }
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    /// 行を並べたビューを、並べ替えられる一覧にする（一覧の座標・落とす位置の線）
+    private func reorderList(_ rows: [WindowItem], layout: ReorderLayout) -> ReorderList {
+        ReorderList(reorder: reorder, space: ReorderState.windowSpace, keys: rows.map(\.appKey), layout: layout, margin: Self.dropMargin)
     }
 
     /// ウインドウの行（アイコンの並びでも、一覧でも同じ行。rowHeight が 0 なら、中身の高さのまま）
@@ -156,6 +157,7 @@ struct WindowSection: View {
 /// - クリック: そのウインドウだけを出す
 /// - ⌘＋クリック: 足す・外す
 /// - ストリップの外（ステージ）へドラッグ: 足す
+/// - 別のディスプレイのウインドウバーへドラッグ: そのディスプレイへ移して、それだけを出す
 private struct WindowRow: View {
     let item: WindowItem
     let index: Int
@@ -223,7 +225,14 @@ private struct WindowRow: View {
                 onDropOutside: { stage.add(draggedItems, on: StageController.screenUnderPointer ?? strip.screen) },
                 // グループの行の上で離したら、そのグループに足す（同じく、まとまりのウインドウをすべて）
                 onDropOnGroup: { group in draggedItems.forEach { stage.addWindow($0, toGroup: group) } },
-                makeWindowDragPreview: { StripWindowDragPreview(title: item.displayTitle, icon: item.icon, count: draggedItems.count) }
+                windowDrag: WindowDragInfo(
+                    preview: { StripWindowDragPreview(title: item.displayTitle, icon: item.icon, count: draggedItems.count) },
+                    canDropOnOtherStrip: otherStripDropRule,
+                    // 別のディスプレイのウインドウバーで離したら、そのディスプレイへ移して、持ってきたウインドウだけを出す（足さない）
+                    onDropOnOtherStrip: { target, dropIndex in
+                        stage.move(draggedItems, to: target.screen, dropIndex: dropIndex, visible: target.rows.map(\.id))
+                    }
+                )
             ))
             // スクロールして見えているかを覚える（サムネイルは見えている行だけ撮る）。
             // 見えてきた行のサムネイルがまだなければ、すぐ撮る
@@ -259,7 +268,7 @@ private struct WindowRow: View {
 
     /// ポインタを乗せたときの説明（名前は行に収まらないことがあるので、ここにすべて出す。アプリの名前も添える）
     private var helpText: String {
-        var operations = "クリックで出す・ダブルクリックで画面いっぱいに広げる・⌘＋クリックで足す/外す・ステージへドラッグで足す・グループの上へドラッグでグループに入れる"
+        var operations = "クリックで出す・ダブルクリックで画面いっぱいに広げる・⌘＋クリックで足す/外す・ステージへドラッグで足す・別のディスプレイのウインドウバーへドラッグで移す・グループの上へドラッグでグループに入れる"
         if let desktopName { operations = "\(desktopName.title)のウインドウです（クリックで、そのデスクトップへ移って出す）\n" + operations }
         if isOnAllDesktops { operations = "すべてのデスクトップに割り当てたウインドウです（どのデスクトップのウインドウバーにも並びます）\n" + operations }
         if item.isMinimized { operations = "しまってあるウインドウです\n" + operations }
@@ -366,7 +375,15 @@ private struct WindowRow: View {
     private var dropRule: ((Int) -> Bool)? {
         guard stage.stripSettings.groupsSameApp else { return nil }
         let cluster = join.cluster
-        return { drop in ListReorder.canDrop(at: drop, keys: strip.rows.map(\.appKey), cluster: cluster) }
+        return { [reorder] drop in ListReorder.canDrop(at: drop, keys: reorder.keys, cluster: cluster) }
+    }
+
+    /// 別のディスプレイのウインドウバーに落とせる位置の決まり（同じアプリをまとめているときだけ。ほかはどこでも落とせる）。
+    /// 行き先に同じアプリがあれば、そのまとまりの中か、すぐ前後だけ。なければ、ほかのアプリのまとまりの中には落とせない（決まりは PinstageCore の ListReorder.canInsert）
+    private var otherStripDropRule: (([String], Int) -> Bool)? {
+        guard stage.stripSettings.groupsSameApp else { return nil }
+        let key = item.appKey
+        return { keys, drop in ListReorder.canInsert(at: drop, keys: keys, key: key) }
     }
 
     /// クリック（1 回目でそのウインドウだけを出し、2 回目＝ダブルクリックでステージいっぱいに広げる。⌘ なら足す・外す）

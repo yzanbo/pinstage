@@ -139,6 +139,9 @@ final class StripController {
     private var autoHide = StripAutoHide()
     /// ドラッグでグループに出し入れするときの、グループの行の位置
     let groupTargets = GroupDropTargets()
+    /// ウインドウの一覧の並べ替えの状態（行の枠と、落とす位置の線）。
+    /// 別のディスプレイのウインドウバーからウインドウを持ってきたときも、ここに落とす位置を入れて線を出す
+    let windowReorder = ReorderState()
 
     init(screen: NSScreen, spaceID: UInt64? = nil, stage: StageController, thumbnails: ThumbnailStore, shortcuts: ShortcutCenter, actions: AppActions) {
         self.screen = screen

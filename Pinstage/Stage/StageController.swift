@@ -384,6 +384,24 @@ final class StageController {
         }
     }
 
+    /// 別のディスプレイのウインドウバーへドラッグ: そのディスプレイのステージに、持ってきたウインドウだけを出す。
+    /// 落とす位置が分かれば、行き先のウインドウバーのその位置に並べる（同じウインドウバーの中で並べ替えるのと同じ）
+    /// - Parameters:
+    ///   - dropIndex: 行き先のウインドウバーの、落とす位置（分からないときは nil で、並びは変えない）
+    ///   - visible: 行き先のウインドウバーに並んでいるウインドウ
+    func move(_ items: [WindowItem], to screen: NSScreen, dropIndex: Int?, visible: [AXUIElement]) {
+        let ids = items.map(\.id)
+        if let dropIndex {
+            reorderWindows { order, app in
+                // 同じアプリをまとめているときは、行き先の同じアプリのまとまりに入れる
+                stripSettings.groupsSameApp
+                    ? ListReorder.inserted(ids, all: order, visible: visible, dropIndex: dropIndex, clusteringBy: app)
+                    : ListReorder.inserted(ids, all: order, visible: visible, dropIndex: dropIndex)
+            }
+        }
+        present(items, on: screen)
+    }
+
     /// ステージから外す（ウインドウはそのまま。残りを並べ直す）
     func remove(_ item: WindowItem, on screen: NSScreen) {
         updateStage(on: screen, apply: true) { $0.selection.remove(item.id) }
@@ -637,11 +655,21 @@ final class StageController {
     /// - Parameter visible: ストリップに並べている行（index・dropIndex は、この中での番号）。
     ///   いまのデスクトップのウインドウだけを並べているときも、ほかのデスクトップのウインドウの並びは崩さない
     func moveWindow(from index: Int, dropIndex: Int, visible: [AXUIElement]) {
+        reorderWindows { order, app in
+            // 同じアプリをまとめているときは、ほかのアプリの間へ落としたら、同じアプリのウインドウをまとめて動かす
+            stripSettings.groupsSameApp
+                ? ListReorder.movedSubset(all: order, visible: visible, from: index, dropIndex: dropIndex, clusteringBy: app)
+                : ListReorder.movedSubset(all: order, visible: visible, from: index, dropIndex: dropIndex)
+        }
+    }
+
+    /// ストリップのウインドウの並び順を変えて覚える（並べ替え・別のディスプレイのウインドウバーへの移動）
+    /// - Parameter change: いまの並びと、ウインドウのアプリを引く関数から、新しい並びを決める
+    private func reorderWindows(_ change: (_ order: [AXUIElement], _ app: (AXUIElement) -> String?) -> [AXUIElement]) {
         let byID = Dictionary(windows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        // 同じアプリをまとめているときは、ほかのアプリの間へ落としたら、同じアプリのウインドウをまとめて動かす
-        let order = stripSettings.groupsSameApp
-            ? ListReorder.movedSubset(all: windows.map(\.id), visible: visible, from: index, dropIndex: dropIndex) { byID[$0]?.appKey }
-            : ListReorder.movedSubset(all: windows.map(\.id), visible: visible, from: index, dropIndex: dropIndex)
+        let current = windows.map(\.id)
+        let order = change(current) { byID[$0]?.appKey }
+        guard order != current else { return }
         windows = order.compactMap { byID[$0] }
         saveWindowOrder()
     }

@@ -42,22 +42,37 @@ struct StripWindowDragPreview: View {
     }
 }
 
-/// バーのスクロール欄で切り取られないよう、見本を独立したパネルに出す。ドロップの判定は従来のドラッグに任せる。
+/// ウインドウの行をドラッグするときだけの情報（ReorderDrag に渡す）
+struct WindowDragInfo {
+    /// バーの外で、ポインタについて動く見本
+    let preview: () -> StripWindowDragPreview
+    /// 別のディスプレイのウインドウバーの、その位置（行き先の行の番号）に落とせるか（行き先の行ごとの鍵 ReorderState.keys から決める。
+    /// 落とせない位置には線を出さない。nil ならどこでも落とせる）
+    let canDropOnOtherStrip: ((_ keys: [String], _ index: Int) -> Bool)?
+    /// 別のディスプレイのウインドウバーで離した（行き先と、その一覧の落とす位置。落とせない位置・行がないときは nil）
+    let onDropOnOtherStrip: (StripController, Int?) -> Void
+}
+
+/// バーのスクロール欄で切り取られないよう、見本を独立したパネルに出す。
+/// 別のディスプレイのバーに重ねている間は、そのバーを光らせ、その一覧の落とす位置に線を出す
 final class StripWindowDragFeedback {
     private let dropTarget: (StripController, CGPoint) -> StripController?
     private weak var source: StripController?
     private weak var target: StripController?
     private var panel: NSPanel?
+    /// いまドラッグしている行の情報
+    private var drag: WindowDragInfo?
 
     init(dropTarget: @escaping (StripController, CGPoint) -> StripController?) {
         self.dropTarget = dropTarget
     }
 
-    func update(from strip: StripController, pointer: CGPoint, preview: () -> StripWindowDragPreview) {
+    func update(from strip: StripController, pointer: CGPoint, drag: WindowDragInfo) {
         if source !== strip {
             finish()
             source = strip
         }
+        self.drag = drag
         // 元のバーに戻ったら、バー内で動く行だけを出す（見本を二重に出さない）。
         guard !strip.frame.contains(pointer) else {
             setTarget(nil)
@@ -68,14 +83,14 @@ final class StripWindowDragFeedback {
             finish(from: strip)
             return
         }
-        setTarget(dropTarget(strip, pointer))
+        retarget(from: strip, at: pointer)
         let screen = StageController.screen(at: pointer) ?? strip.screen
         let frame = StripDragGeometry.previewFrame(pointer: pointer, size: StripWindowDragPreview.size, in: screen.visibleFrame)
         let previewPanel: NSPanel
         if let panel {
             previewPanel = panel
         } else {
-            previewPanel = makePanel(preview())
+            previewPanel = makePanel(drag.preview())
             panel = previewPanel
         }
         if previewPanel.frame.size == frame.size {
@@ -89,7 +104,13 @@ final class StripWindowDragFeedback {
     /// ポインタを止めてから行き先のバーが自動で現れた場合にも、枠を光らせる。
     func refreshDropTarget(from strip: StripController) {
         guard source === strip, panel?.isVisible == true else { return }
-        setTarget(dropTarget(strip, NSEvent.mouseLocation))
+        retarget(from: strip, at: NSEvent.mouseLocation)
+    }
+
+    /// 重ねている別のディスプレイのウインドウバーと、線を出している落とす位置（ドラッグを終えるとき、見本を消す前に聞く。線の位置にそのまま落とす）
+    func destination(from strip: StripController) -> (strip: StripController, dropIndex: Int?)? {
+        guard source === strip, let target else { return nil }
+        return (target, target.windowReorder.dropIndex)
     }
 
     /// ドラッグの終了時、または元のバーを閉じたときに消す。
@@ -102,13 +123,30 @@ final class StripWindowDragFeedback {
         panel?.orderOut(nil)
         panel = nil
         source = nil
+        drag = nil
     }
 
     private func setTarget(_ strip: StripController?) {
         guard target !== strip else { return }
         target?.spaceState.isWindowDropTarget = false
+        target?.windowReorder.setDropIndex(nil)
         target = strip
         strip?.spaceState.isWindowDropTarget = true
+    }
+
+    /// ポインタの下の行き先のバーを光らせ、その一覧の落とす位置に線を出す（同じバーの中で並べ替えるときと同じ線）
+    private func retarget(from strip: StripController, at pointer: CGPoint) {
+        setTarget(dropTarget(strip, pointer))
+        guard let target else { return }
+        target.windowReorder.setDropIndex(dropIndex(in: target, at: pointer))
+    }
+
+    /// そのバーの一覧の、ポインタの位置での落とす位置（行がない・落とせない位置なら nil）
+    private func dropIndex(in target: StripController, at pointer: CGPoint) -> Int? {
+        let reorder = target.windowReorder
+        guard let point = target.pointerInContent(at: pointer), let index = reorder.dropIndex(atContentPoint: point) else { return nil }
+        if let canDrop = drag?.canDropOnOtherStrip, !canDrop(reorder.keys, index) { return nil }
+        return index
     }
 
     private func makePanel(_ preview: StripWindowDragPreview) -> NSPanel {

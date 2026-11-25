@@ -56,21 +56,50 @@ public enum ListReorder {
     ///   - from: 見えている行の番号
     ///   - dropIndex: 見えている行の、落とす位置（その行の前。visible.count なら最後の行の後ろ）
     public static func movedSubset<ID: Equatable>(all: [ID], visible: [ID], from: Int, dropIndex: Int) -> [ID] {
-        guard visible.indices.contains(from), (0...visible.count).contains(dropIndex),
-              !isNoOp(from: from, dropIndex: dropIndex)
-        else { return all }
-        let moving = visible[from]
-        var result = all.filter { $0 != moving }
-        if dropIndex < visible.count, let anchor = result.firstIndex(of: visible[dropIndex]) {
+        // dropIndex の範囲は inserted が確かめる
+        guard visible.indices.contains(from), !isNoOp(from: from, dropIndex: dropIndex) else { return all }
+        return inserted([visible[from]], all: all, visible: visible, dropIndex: dropIndex)
+    }
+
+    /// moving を、見えている一覧の落とす位置にまとめて入れたときの、全体の並び（一覧の中での並べ替えにも、
+    /// ほかの一覧（別のディスプレイのウインドウバー）から持ってきたときにも使う）
+    ///
+    /// - Parameters:
+    ///   - moving: 動かすもの（この順番のまま、まとめて入れる。見えている一覧の中にあってもよい）
+    ///   - all: 全体の並び
+    ///   - visible: 行き先の一覧に見えている行の並び（all の一部）
+    ///   - dropIndex: 行き先の一覧の、落とす位置（その行の前。visible.count なら最後の行の後ろ）
+    /// - Returns: 行き先が空のときなど、入れる目印がなければ all のまま
+    public static func inserted<ID: Equatable>(_ moving: [ID], all: [ID], visible: [ID], dropIndex: Int) -> [ID] {
+        guard !moving.isEmpty, (0...visible.count).contains(dropIndex) else { return all }
+        var result = all.filter { !moving.contains($0) }
+        if let next = visible[dropIndex...].first(where: { !moving.contains($0) }), let anchor = result.firstIndex(of: next) {
             // 落とす位置の行の前に入れる
-            result.insert(moving, at: anchor)
-        } else if let last = visible.last(where: { $0 != moving }), let anchor = result.firstIndex(of: last) {
+            result.insert(contentsOf: moving, at: anchor)
+        } else if let last = visible.last(where: { !moving.contains($0) }), let anchor = result.firstIndex(of: last) {
             // 最後の行の後ろに入れる
-            result.insert(moving, at: anchor + 1)
+            result.insert(contentsOf: moving, at: anchor + 1)
         } else {
             return all
         }
         return result
+    }
+
+    /// 同じアプリをまとめているときの inserted（inserted と同じ引数。入れたあとも、同じアプリはまとまったまま。RecentOrder.clustered）
+    public static func inserted<ID: Equatable>(_ moving: [ID], all: [ID], visible: [ID], dropIndex: Int, clusteringBy app: (ID) -> String?) -> [ID] {
+        RecentOrder.clustered(inserted(moving, all: all, visible: visible, dropIndex: dropIndex), app: app)
+    }
+
+    /// 同じアプリをまとめているときに、ほかの一覧から持ってきたものを、その位置（その番号の行の前）に落とせるか
+    ///
+    /// - 行き先に同じアプリがあれば、そのまとまりの中か、すぐ前後だけ（落としたあとも、同じアプリはまとまったまま）
+    /// - なければ、ほかのアプリのまとまりの中（同じ鍵の 2 つの行の間）には落とせない
+    /// - Parameter key: 持ってきたもののアプリ
+    public static func canInsert<Key: Equatable>(at drop: Int, keys: [Key], key: Key) -> Bool {
+        if let first = keys.firstIndex(of: key), let last = keys.lastIndex(of: key) {
+            return (first...(last + 1)).contains(drop)
+        }
+        return canDrop(at: drop, keys: keys, cluster: nil)
     }
 
     /// 同じアプリをまとめているときの並べ替え（movedSubset と同じ引数）
@@ -92,15 +121,7 @@ public enum ListReorder {
         }
         // 同じアプリのウインドウをまとめて動かす（分からないものは、そのウインドウだけ）
         let block = key.map { key in all.filter { app($0) == key } } ?? [moving]
-        var rest = all.filter { item in !block.contains(item) }
-        if let next, let anchor = rest.firstIndex(of: next) {
-            rest.insert(contentsOf: block, at: anchor)
-        } else if let last = visible.last(where: { item in !block.contains(item) }), let anchor = rest.firstIndex(of: last) {
-            rest.insert(contentsOf: block, at: anchor + 1)
-        } else {
-            return all
-        }
-        return RecentOrder.clustered(rest, app: app)
+        return inserted(block, all: all, visible: visible, dropIndex: dropIndex, clusteringBy: app)
     }
 
     /// その行を含む、となり合った同じ鍵（アプリ）の行の範囲（2 つ以上つながっているときだけ。1 つだけなら nil）

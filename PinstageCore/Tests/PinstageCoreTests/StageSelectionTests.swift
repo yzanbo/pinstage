@@ -93,6 +93,54 @@ struct RecentOrderTests {
         #expect(ListReorder.movedSubset(all: all, visible: all, from: 2, dropIndex: 3, clusteringBy: app) == all)
     }
 
+    @Test("別のウインドウバーから持ってきたものを、落とした位置に入れる")
+    func insertsFromOtherList() {
+        // x・y は別のディスプレイのウインドウ、h は行き先に見えていないウインドウ
+        let all = ["x", "a", "h", "b", "c", "y"]
+        let visible = ["a", "b", "c"]
+        // b の前へ
+        #expect(ListReorder.inserted(["x", "y"], all: all, visible: visible, dropIndex: 1) == ["a", "h", "x", "y", "b", "c"])
+        // 先頭へ
+        #expect(ListReorder.inserted(["y"], all: all, visible: visible, dropIndex: 0) == ["x", "y", "a", "h", "b", "c"])
+        // 最後の行の後ろへ
+        #expect(ListReorder.inserted(["x"], all: all, visible: visible, dropIndex: 3) == ["a", "h", "b", "c", "x", "y"])
+        // 行き先が空なら、そのまま
+        #expect(ListReorder.inserted(["x"], all: all, visible: [], dropIndex: 0) == all)
+        // 範囲の外も、そのまま
+        #expect(ListReorder.inserted(["x"], all: all, visible: visible, dropIndex: 4) == all)
+    }
+
+    @Test("同じアプリをまとめるとき、別のウインドウバーから持ってきたものは、同じアプリのまとまりに入る")
+    func insertsIntoCluster() {
+        let apps = ["a1": "A", "a2": "A", "b": "B", "x": "A"]
+        let app: (String) -> String? = { apps[$0] }
+        let visible = ["a1", "a2", "b"]
+        // まとまりの中（a1 と a2 の間）へ
+        #expect(ListReorder.inserted(["x"], all: ["x"] + visible, visible: visible, dropIndex: 1, clusteringBy: app) == ["a1", "x", "a2", "b"])
+        // まとまりのすぐ後ろへ
+        #expect(ListReorder.inserted(["x"], all: visible + ["x"], visible: visible, dropIndex: 2, clusteringBy: app) == ["a1", "a2", "x", "b"])
+    }
+
+    @Test("同じアプリをまとめるとき、別のウインドウバーから持ってきたものを落とせる位置")
+    func canInsertFromOtherList() {
+        let keys = ["A", "A", "B", "C", "C"]
+        // 行き先に同じアプリがなければ、ほかのまとまりの中には落とせない
+        #expect(ListReorder.canInsert(at: 0, keys: keys, key: "D"))
+        #expect(!ListReorder.canInsert(at: 1, keys: keys, key: "D"))
+        #expect(ListReorder.canInsert(at: 2, keys: keys, key: "D"))
+        #expect(!ListReorder.canInsert(at: 4, keys: keys, key: "D"))
+        #expect(ListReorder.canInsert(at: 5, keys: keys, key: "D"))
+        // 同じアプリがあれば、そのまとまりの中か、すぐ前後だけ
+        #expect(!ListReorder.canInsert(at: 2, keys: keys, key: "C"))
+        #expect(ListReorder.canInsert(at: 3, keys: keys, key: "C"))
+        #expect(ListReorder.canInsert(at: 4, keys: keys, key: "C"))
+        #expect(ListReorder.canInsert(at: 5, keys: keys, key: "C"))
+        #expect(ListReorder.canInsert(at: 2, keys: keys, key: "B"))
+        #expect(!ListReorder.canInsert(at: 4, keys: keys, key: "B"))
+        // 空の一覧には、どこでも
+        #expect(ListReorder.canInsert(at: 0, keys: [String](), key: "A"))
+    }
+
     @Test("となり合った同じアプリの行の範囲（1 つだけなら nil）")
     func clusterRange() {
         let keys = ["A", "A", "B", "C", "C", "C"]

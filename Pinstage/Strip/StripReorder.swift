@@ -19,6 +19,13 @@ final class ReorderState {
     var followers: Set<Int> = []
     /// 一緒に動く行の、ずらす量（ドラッグしている行と同じ）
     var followOffset: CGSize = .zero
+    /// 一覧の枠（ストリップの中身の座標。GroupDropTargets.space）と並べ方（ReorderList が覚える）。
+    /// ほかのウインドウバーから持ってきたとき、ポインタの位置から落とす位置を決めるのに使う。描くのには使わないので、変わっても描き直さない
+    @ObservationIgnored var listFrame: CGRect = .null
+    @ObservationIgnored var layout: ReorderLayout = .rows
+    /// 行ごとの鍵（ウインドウならアプリ。同じ鍵のとなり合った行がまとまりになる）。ReorderList が一覧を描くたびに覚える。
+    /// 行の数と、落とせる位置の決まりに使う（ドラッグの途中で、行の一覧を作り直さずに済むように）
+    @ObservationIgnored var keys: [String] = []
 
     /// ドラッグで動いている行か（ドラッグしている行と、一緒に動く行）。
     /// 動いている行は、ほかの行より手前に描く。並べる側で、行のいちばん外側に `.zIndex(reorder.isMoving(index) ? 1 : 0)` を付けること
@@ -34,6 +41,26 @@ final class ReorderState {
             if followers != next { followers = next }
             if followOffset != offset { followOffset = offset }
         }
+    }
+
+    /// 落とす位置を変える（変わったときだけ。ポインタを動かすたびに描き直さないように）
+    func setDropIndex(_ index: Int?) {
+        if dropIndex != index { dropIndex = index }
+    }
+
+    /// ポインタの位置（一覧の座標）から、落とす位置を決める（線を出すかどうかは、呼ぶ側で決める）
+    func dropIndex(for point: CGPoint, layout: ReorderLayout, count: Int) -> Int {
+        switch layout {
+        case .rows: ListReorder.dropIndex(forY: point.y, frames: frames, count: count)
+        case .columns: ListReorder.dropIndex(forX: point.x, frames: frames, count: count)
+        case .grid: ListReorder.gridDropIndex(for: point, frames: frames, count: count)
+        }
+    }
+
+    /// ストリップの中身の座標のポインタから、落とす位置を決める（ほかのウインドウバーから持ってきたとき。一覧をまだ描いていなければ nil）
+    func dropIndex(atContentPoint point: CGPoint) -> Int? {
+        guard !listFrame.isNull, !keys.isEmpty else { return nil }
+        return dropIndex(for: CGPoint(x: point.x - listFrame.minX, y: point.y - listFrame.minY), layout: layout, count: keys.count)
     }
 
     func finishDrag() {
@@ -81,8 +108,8 @@ struct ReorderDrag: ViewModifier {
     var onDropOutside: (() -> Void)?
     /// グループの行の上で離した（ウインドウの行だけ。nil ならグループには入れない）
     var onDropOnGroup: ((UUID) -> Void)?
-    /// ウインドウの行だけ、バーの外にポインタについて動く見本を出す。
-    var makeWindowDragPreview: (() -> StripWindowDragPreview)?
+    /// ウインドウの行だけ: バーの外にポインタについて動く見本を出し、別のディスプレイのウインドウバーで離したら、そこへ移す
+    var windowDrag: WindowDragInfo?
     @State private var offset: CGSize = .zero
     @State private var didDrag = false
     @GestureState private var tracksGesture = false
@@ -132,29 +159,25 @@ struct ReorderDrag: ViewModifier {
                         strip.isDragging = true
                         offset = value.translation
                         let pointer = NSEvent.mouseLocation
-                        if let makeWindowDragPreview {
-                            strip.windowDragFeedback?.update(from: strip, pointer: pointer, preview: makeWindowDragPreview)
+                        if let windowDrag {
+                            strip.windowDragFeedback?.update(from: strip, pointer: pointer, drag: windowDrag)
                         }
                         reorder.drag(index, with: cluster, offset: value.translation)
                         let group = hoveredGroup(at: pointer)
                         if onDropOnGroup != nil { strip.groupTargets.hovered = group }
                         if group != nil {
                             // グループの上では、並べ替えの線を出さない
-                            reorder.dropIndex = nil
+                            reorder.setDropIndex(nil)
                             trace("グループの上")
                         } else if isPointerInStrip(pointer) {
-                            let target = switch layout {
-                            case .rows: ListReorder.dropIndex(forY: value.location.y, frames: reorder.frames, count: count)
-                            case .columns: ListReorder.dropIndex(forX: value.location.x, frames: reorder.frames, count: count)
-                            case .grid: ListReorder.gridDropIndex(for: value.location, frames: reorder.frames, count: count)
-                            }
+                            let target = reorder.dropIndex(for: value.location, layout: layout, count: count)
                             // 落とせない位置（同じアプリをまとめているときの、まとまりの中）は、線を出さない
                             let allowed = canDrop?(target) ?? true
                             let isNoOp = ListReorder.isNoOp(from: index, dropIndex: target)
-                            reorder.dropIndex = !allowed || isNoOp ? nil : target
+                            reorder.setDropIndex(!allowed || isNoOp ? nil : target)
                             trace(!allowed ? "落とせない位置 \(target)" : isNoOp ? "動かない位置 \(target)" : "線 \(target)")
                         } else {
-                            reorder.dropIndex = nil
+                            reorder.setDropIndex(nil)
                             trace("ウインドウバーの外")
                         }
                     }
@@ -163,11 +186,15 @@ struct ReorderDrag: ViewModifier {
                         let pointer = NSEvent.mouseLocation
                         let drop = reorder.dropIndex
                         let group = moved ? hoveredGroup(at: pointer) : nil
+                        // 別のディスプレイのウインドウバーの上で離したか（見本を消す前に、行き先と落とす位置を聞く）
+                        let destination = strip.windowDragFeedback?.destination(from: strip)
                         resetDrag()
                         if !moved {
                             onTap()
                         } else if let group {
                             onDropOnGroup?(group)
+                        } else if let destination, let windowDrag {
+                            withAnimation(.snappy(duration: 0.2)) { windowDrag.onDropOnOtherStrip(destination.strip, destination.dropIndex) }
                         } else if !isPointerInStrip(pointer) {
                             onDropOutside?()
                         } else if let drop {
@@ -198,7 +225,28 @@ struct ReorderDrag: ViewModifier {
         strip.isDragging = false
         reorder.finishDrag()
         if onDropOnGroup != nil { strip.groupTargets.hovered = nil }
-        if makeWindowDragPreview != nil { strip.windowDragFeedback?.finish(from: strip) }
+        if windowDrag != nil { strip.windowDragFeedback?.finish(from: strip) }
+    }
+}
+
+/// 並べ替えられる一覧に付ける: 一覧の座標の名前を付け、一覧の枠と並べ方を ReorderState に覚えさせ、落とす位置の線を重ねる
+struct ReorderList: ViewModifier {
+    let reorder: ReorderState
+    /// 一覧の座標の名前（行の ReorderDrag と同じ）
+    let space: String
+    /// 行ごとの鍵（ReorderState.keys。数が行の数になる）
+    let keys: [String]
+    let layout: ReorderLayout
+    /// 一覧の外に、線を引ける隙間（DropLine.margin）
+    var margin: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .coordinateSpace(.named(space))
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(GroupDropTargets.space)) } action: { reorder.listFrame = $0 }
+            .onChange(of: layout, initial: true) { reorder.layout = layout }
+            .onChange(of: keys, initial: true) { reorder.keys = keys }
+            .overlay(alignment: .topLeading) { DropLine(reorder: reorder, count: keys.count, layout: layout, margin: margin) }
     }
 }
 
