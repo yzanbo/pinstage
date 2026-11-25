@@ -21,16 +21,23 @@ public struct StageBoard<ID: Hashable>: Equatable {
     }
 
     /// あるディスプレイのステージを変える。変えたあとに入っているウインドウは、ほかのディスプレイのステージから外す
-    public mutating func update(on display: String, _ change: (inout Stage) -> Void) {
+    /// - Returns: ウインドウが外れた、ほかのディスプレイ（残りを、空いたところを詰めて並べ直すため）
+    @discardableResult
+    public mutating func update(on display: String, _ change: (inout Stage) -> Void) -> Set<String> {
         var stage = self.stage(on: display)
         change(&stage)
         stages[display] = stage
         let members = Set(stage.selection.members)
+        var pruned: Set<String> = []
         for key in stages.keys where key != display {
             guard var other = stages[key] else { continue }
+            // prune は外すだけなので、数が減ったら外れた
+            let count = other.selection.members.count
             other.selection.prune(keeping: Set(other.selection.members).subtracting(members))
+            if other.selection.members.count != count { pruned.insert(key) }
             stages[key] = other
         }
+        return pruned
     }
 
     /// 外で前に出したウインドウに選択だけを合わせる。すでに組み合わせに入っていれば、そのまま保つ。

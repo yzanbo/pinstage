@@ -104,7 +104,7 @@ extension StageController {
             updateGroup(group)
         }
         if lastRecalledGroupID == id, let shown = lastRecalledStage,
-           let screen = NSScreen.screens.first(where: { Self.displayKey($0) == shown.screenKey }),
+           let screen = Self.screen(forKey: shown.screenKey),
            Set(stage(on: screen).selection.members) == shown.windows {
             setLayout(choice, on: screen)
         } else {

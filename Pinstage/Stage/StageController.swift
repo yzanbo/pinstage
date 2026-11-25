@@ -322,6 +322,11 @@ final class StageController {
         screen.displayUUID ?? "display-\(screen.displayNumber ?? 0)"
     }
 
+    /// その鍵（displayKey）の、いまつないでいるディスプレイ（外したディスプレイなら nil）
+    static func screen(forKey key: String) -> NSScreen? {
+        NSScreen.screens.first { displayKey($0) == key }
+    }
+
     /// ポインタのあるディスプレイ（ショートカットで操作するときに使う）
     static var screenUnderPointer: NSScreen? {
         screen(at: NSEvent.mouseLocation) ?? NSScreen.primary
@@ -337,9 +342,13 @@ final class StageController {
         board.stage(on: Self.displayKey(screen))
     }
 
-    /// そのディスプレイのステージを変える（apply なら、変えたあと並べて前に出す）
+    /// そのディスプレイのステージを変える（apply なら、変えたあと並べて前に出す）。
+    /// ほかのディスプレイのステージからウインドウが外れたら、apply にかかわらず、そのディスプレイの残りを詰めて並べ直す（前には出さない）
     func updateStage(on screen: NSScreen, apply: Bool, _ change: (inout StageBoard<AXUIElement>.Stage) -> Void) {
-        board.update(on: Self.displayKey(screen), change)
+        let pruned = board.update(on: Self.displayKey(screen), change)
+        for other in pruned.compactMap(Self.screen(forKey:)) {
+            applyStage(on: other, raise: false)
+        }
         if apply { applyStage(on: screen) }
     }
 
@@ -471,7 +480,8 @@ final class StageController {
     // MARK: - 並べて前に出す
 
     /// そのディスプレイのステージのウインドウを、選んだ型で並べて最前面に出す
-    func applyStage(on screen: NSScreen) {
+    /// - Parameter raise: 並べたウインドウを前に出すか（ほかのディスプレイの空きを詰めるだけのときは出さない）
+    func applyStage(on screen: NSScreen, raise: Bool = true) {
         let stage = self.stage(on: screen)
         let items = stageItems(on: screen)
         guard !items.isEmpty else { return }
@@ -483,7 +493,7 @@ final class StageController {
         }
         checkPlacements(placements, restored: restored, on: screen)
         // ストリップの行の並びは変えない（⌘＋クリックで続けて選ぶとき、選びたい行がずれないように）
-        raise(items)
+        if raise { self.raise(items) }
     }
 
     /// 並べたあと、少し待って実際の枠を読み直し、ずれていたら合わせ直す
@@ -532,7 +542,8 @@ final class StageController {
         let settings = settings ?? stripSettings
         let primaryHeight = NSScreen.primary?.frame.height ?? screen.frame.height
         let visible = screen.visibleFrame
-        let hasStrip = stripScreens.contains { Self.displayKey($0) == Self.displayKey(screen) }
+        let key = Self.displayKey(screen)
+        let hasStrip = stripScreens.contains { Self.displayKey($0) == key }
         let frame = hasStrip
             ? StripGeometry.stageFrame(in: visible, mode: settings.mode, edge: settings.edge, thickness: settings.effectiveThickness, gap: settings.stageGap)
             : visible

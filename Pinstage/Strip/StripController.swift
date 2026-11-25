@@ -93,7 +93,7 @@ final class StripController {
     /// いまのディスプレイ（作ったときの NSScreen の値が古くならないよう、つないでいるディスプレイから同じものを探し直す）。
     /// Dock・メニューバーの設定を変えると、使える範囲（visibleFrame）が変わるため
     private var currentScreen: NSScreen {
-        NSScreen.screens.first { StageController.displayKey($0) == displayKey } ?? screen
+        StageController.screen(forKey: displayKey) ?? screen
     }
 
     /// そのディスプレイの使える範囲（メニューバーと Dock を除いた範囲）

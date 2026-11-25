@@ -147,6 +147,18 @@ struct StageBoardTests {
         #expect(board.stage(on: "B").selection.members == ["x"])
     }
 
+    @Test("ウインドウが外れたほかのディスプレイを返す（外れなければ返さない）")
+    func reportsPrunedDisplays() {
+        var board = StageBoard<String>()
+        board.update(on: "A") { $0.selection.replace(with: ["x", "y"]) }
+        board.update(on: "C") { $0.selection.replace(with: ["z"]) }
+        #expect(board.update(on: "B") { $0.selection.add("x") } == ["A"])
+        #expect(board.update(on: "B") { $0.selection.add("w") } == [])
+        // 外れて空になったディスプレイも返す
+        #expect(board.update(on: "B") { $0.selection.replace(with: ["y", "z"]) } == ["A", "C"])
+        #expect(board.stage(on: "A").selection.members.isEmpty)
+    }
+
     @Test("並べ方はディスプレイごとに持つ")
     func layoutPerDisplay() {
         var board = StageBoard<String>()
