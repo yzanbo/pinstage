@@ -123,6 +123,7 @@ final class StageController {
         loadLibrary()
         if !isTrusted { AccessibilityPermission.prompt() }
         refresh()
+        followFrontWindows()
         // ウインドウの開け閉め・名前の変化と、許可の変化を拾うため、少しずつ読み直す
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
@@ -133,6 +134,15 @@ final class StageController {
             MainActor.assumeIsolated { self?.refreshIfWindowListChanged() }
         }
         // デスクトップを切り替えたときの読み直しは、StripManager が行う（先に、そのデスクトップのストリップを用意するため）
+    }
+
+    /// 起動したとき: ウインドウバーのあるディスプレイごとに、いちばん前に見えているウインドウをステージに選ぶ。
+    /// 位置と大きさはそのまま（外で前に出したときと同じ）。起動した Pinstage が前面のアプリになるので、前面のアプリからは選べない
+    private func followFrontWindows() {
+        for screen in stripScreens {
+            guard let front = visibleArrangement(on: screen).last?.item else { continue }
+            board.followFocus(of: front.id, on: Self.displayKey(screen))
+        }
     }
 
     func stop() {

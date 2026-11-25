@@ -47,7 +47,7 @@ extension StageController {
     }
 
     /// そのディスプレイに見えているウインドウと、その枠（後ろから前の順。いまのデスクトップの、最小化していないもの）
-    private func visibleArrangement(on screen: NSScreen) -> [(item: WindowItem, frame: CGRect)] {
+    func visibleArrangement(on screen: NSScreen) -> [(item: WindowItem, frame: CGRect)] {
         let frames = AXWindow.frames(of: windows)
         let locator = DisplayLocator()
         let key = Self.displayKey(screen)
