@@ -741,6 +741,10 @@ final class StageController {
     #if DEBUG
     // MARK: - 見本（開発用）
 
+    enum PreviewDesktops {
+        case none, singleDisplay, multipleDisplays
+    }
+
     /// 見本のデータを入れる（ストリップの見た目を画像に描き出して確かめるため。保存はしない）
     func loadPreview(
         windows: [WindowItem],
@@ -753,7 +757,7 @@ final class StageController {
         customLayouts: [CustomLayout] = [],
         otherDesktop: [AXUIElement] = [],
         allDesktops: [AXUIElement] = [],
-        showDesktopList: Bool = false,
+        desktopPreview: PreviewDesktops = .none,
         badges: [String: String] = [:]
     ) {
         appBadges = AppIconBadge.merge(standard: badges, published: [:])
@@ -769,14 +773,23 @@ final class StageController {
             windowSpaces = Dictionary(other + all, uniquingKeysWith: { first, _ in first })
             desktopNames = [1: DesktopName(number: 1), 2: DesktopName(number: 2), 3: DesktopName(number: 3)]
         }
-        if showDesktopList {
-            let ids: [UInt64] = [1, 2, 3]
-            desktopDisplays = [SkyLight.Display(identifier: Self.displayKey(screen),
-                                                spaces: ids.map { .init(id: $0, isFullScreen: false) }, current: 1)]
-            desktopNames = Dictionary(uniqueKeysWithValues: ids.map { ($0, DesktopName(number: Int($0))) })
-            // 最初の 3 つはデスクトップ 1、残りはデスクトップ 2。最後の 1 つは、すべてのデスクトップに割り当てたもの（印を見るため）
+        if desktopPreview != .none {
+            let multipleDisplays = desktopPreview == .multipleDisplays
+            let ids: [UInt64] = multipleDisplays ? [1, 2, 3, 4] : [1, 2, 3]
+            let firstDisplay = SkyLight.Display(identifier: Self.displayKey(screen),
+                                                spaces: (multipleDisplays ? [1, 2] : ids).map { .init(id: $0, isFullScreen: false) },
+                                                current: 1)
+            let previewDisplays = multipleDisplays
+                ? [firstDisplay, SkyLight.Display(identifier: "Preview-Secondary", spaces: [3, 4].map { .init(id: $0, isFullScreen: false) }, current: 3)]
+                : [firstDisplay]
+            desktopDisplays = previewDisplays
+            desktopNames = DesktopNaming.names(displays: previewDisplays.map { display in
+                display.spaces.map { .init(id: $0.id, isFullScreen: $0.isFullScreen) }
+            })
+            // 複数ディスプレイの見本では両方にウインドウを振り分ける。最後の 1 つはすべてのデスクトップに置く。
             windowSpaces = Dictionary(uniqueKeysWithValues: windows.enumerated().map { index, window in
-                (window.id, index == windows.count - 1 ? Set<UInt64>(ids) : [index < 3 ? 1 : 2])
+                let desktop = multipleDisplays ? ids[index / 2 % ids.count] : index < 3 ? 1 : 2
+                return (window.id, index == windows.count - 1 ? Set(ids) : [desktop])
             })
         }
         updateStage(on: screen, apply: false) { stage in

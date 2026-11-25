@@ -22,6 +22,8 @@ struct DesktopPickerSection: Identifiable {
     }
 }
 
+typealias DesktopPickerDisplayGroup = DesktopDisplayGroup<DesktopListDisplay?, DesktopPickerSection>
+
 struct DesktopPickerBadge {
     let text: String
     let title: String
@@ -168,12 +170,16 @@ final class DesktopPickerModel {
     /// 格子の列の数も、この幅に合わせる（矢印キーで動く列の数も同じ値を使う）
     func fitOverview(in visible: CGRect) -> CGSize {
         let width = WindowSwitcherLayout.overviewWidth(for: appearance, visibleWidth: visible.width)
-        columns = WindowSwitcherLayout.columns(for: appearance, size: displaySize, panelWidth: width)
-        let sections = sections
+        let groups = displayGroups
+        let sections = groups.flatMap(\.items)
+        let displayCount = groups.filter { $0.id != nil }.count
+        columns = WindowSwitcherLayout.columns(for: appearance, size: displaySize, panelWidth: width,
+                                               showsDisplayGroups: displayCount > 0)
         let height = WindowSwitcherLayout.overviewHeight(
             for: appearance, size: displaySize, sectionCounts: sections.map(\.windows.count),
             titledSections: sections.contains { !$0.title.isEmpty }, columns: columns,
             maximumHeight: (visible.height * WindowSwitcherLayout.maximumHeightShare).rounded(.down),
+            displayGroupCount: displayCount,
             showsNotice: isMissingThumbnailPermission
         )
         return CGSize(width: width, height: height)
@@ -226,37 +232,52 @@ final class DesktopPickerModel {
         }
     }
 
-    var sections: [DesktopPickerSection] {
+    private var sections: [DesktopPickerSection] { displayGroups.flatMap(\.items) }
+
+    var displayGroups: [DesktopPickerDisplayGroup] {
         guard stage.isTrusted else { return [] }
         let filter = WindowSwitcherFilter(query: query)
         let windows = stage.windows.filter {
             !stage.hiddenWindowIDs.contains($0.id) && filter.matches(title: $0.title, appName: $0.appName)
         }
         // すべてのディスプレイのデスクトップ（開いたディスプレイのいまのデスクトップが先頭）
-        let spaces = stage.desktopListSpaces(on: screen, forSwitcher: true)
+        let spaceGroups = stage.desktopListGroups(on: screen, for: .switcher)
+        let spaces = spaceGroups.flatMap(\.items)
         if grouping == .byDesktop, spaces.isEmpty {
             // デスクトップを見分けられない場合、分かる範囲だけを出す。
             let (here, other) = (
                 windows.filter { stage.currentSpaceIDs.contains($0.id) },
                 windows.filter { !stage.currentSpaceIDs.contains($0.id) }
             )
-            return [DesktopPickerSection(id: .current, title: "現在のデスクトップ", isCurrent: true, windows: here)]
-                + unassignedSection(other)
+            let current = DesktopPickerSection(id: .current, title: "現在のデスクトップ", isCurrent: true, windows: here)
+            return unlabelledGroup([current] + unassignedSection(other))
         }
         let ids = windows.map(\.id)
         let items = Dictionary(windows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let membership = stage.windowSpaces ?? [:]
         if grouping == .flat {
-            return [flatSection(focusHistory.ordered(ids).compactMap { items[$0] }, spaces: spaces, membership: membership)]
+            let section = flatSection(focusHistory.ordered(ids).compactMap { items[$0] }, spaces: spaces, membership: membership)
+            return unlabelledGroup([section])
         }
         let index = DesktopWindowList(windows: ids, membership: membership, desktops: Set(spaces.map(\.id)))
-        let known = spaces.map { space in
-            DesktopPickerSection(id: .desktop(space.id), title: space.title, isCurrent: space.isCurrent,
-                                 windows: (index.byDesktop[space.id] ?? []).compactMap { items[$0] })
+        let groups: [DesktopPickerDisplayGroup] = spaceGroups.compactMap { group in
+            group.compactMapItems { space in
+                let windows = (index.byDesktop[space.id] ?? []).compactMap { items[$0] }
+                // 絞り込み中は、合うもののないデスクトップやディスプレイの枠を出さない。
+                guard query.isEmpty || !windows.isEmpty else { return nil }
+                return DesktopPickerSection(id: .desktop(space.id), title: space.name.title, isCurrent: space.isCurrent, windows: windows)
+            }
         }
-        // 絞り込んでいる間は、合うもののないデスクトップを出さない
-        let shown = query.isEmpty ? known : known.filter { !$0.windows.isEmpty }
-        return shown + unassignedSection(index.unassigned.compactMap { items[$0] })
+        let unassigned = unassignedSection(index.unassigned.compactMap { items[$0] })
+        if let group = groups.first, group.id == nil {
+            // 一画面で枠がないときは、所属不明の項目も同じグループに置く。
+            return unlabelledGroup(group.items + unassigned)
+        }
+        return groups + unlabelledGroup(unassigned)
+    }
+
+    private func unlabelledGroup(_ sections: [DesktopPickerSection]) -> [DesktopPickerDisplayGroup] {
+        sections.isEmpty ? [] : [DesktopPickerDisplayGroup(id: nil, items: sections)]
     }
 
     /// まとめて表示するときは、複数のデスクトップにあるウインドウも一度だけ出す。

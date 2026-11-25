@@ -4,8 +4,7 @@ import SwiftUI
 
 /// ストリップ上のまとめボタンと、デスクトップごとのボタン。
 struct StripDesktopList: View {
-    private static let buttonSpacing: CGFloat = 3
-    private static let maxVisibleRows = 4
+    private typealias Layout = StripDesktopButtonLayout
     private static let overviewSymbol = "rectangle.on.rectangle"
 
     let stage: StageController
@@ -17,65 +16,72 @@ struct StripDesktopList: View {
 
     var body: some View {
         if stage.stripSettings.showsDesktopList {
-            let spaces = stage.desktopListSpaces(on: strip.screen)
-            if !spaces.isEmpty {
-                buttons(spaces, presentation: stage.stripSettings.desktopButtons.presentation(isCompact: strip.isCompact))
+            let groups = stage.desktopListGroups(on: strip.screen, for: .windowBar)
+            if !groups.isEmpty {
+                buttons(groups, presentation: stage.stripSettings.desktopButtons.presentation(isCompact: strip.isCompact))
             }
         }
     }
 
     @ViewBuilder
-    private func buttons(_ spaces: [DesktopListSpace], presentation: StripDesktopButtons.Presentation) -> some View {
+    private func buttons(_ groups: [DesktopSpaceGroup], presentation: StripDesktopButtons.Presentation) -> some View {
+        let layout = Layout(groups: groups.map { ($0.items.count, $0.id != nil) })
         if strip.isHorizontal {
-            HStack(spacing: Self.buttonSpacing) {
+            HStack(spacing: Layout.buttonSpacing) {
                 if presentation.showsOverview { overviewButton() }
-                if presentation.showsDesktopNumbers { numberRow(spaces) }
+                if presentation.showsDesktopNumbers { numberRow(groups, layout: layout) }
             }
         } else if presentation == .desktopNumbers {
             // 「自動」の幅が広い縦バーは、個別ボタンを横に並べる。
-            numberRow(spaces)
+            numberRow(groups, layout: layout)
         } else {
             VStack(alignment: verticalAlignment, spacing: 4) {
                 overviewButton(showsTitle: !strip.isCompact)
-                if presentation.showsDesktopNumbers { numberColumn(spaces) }
+                if presentation.showsDesktopNumbers { numberColumn(groups, layout: layout) }
             }
             .frame(maxWidth: .infinity, alignment: frameAlignment)
         }
     }
 
-    private func numberColumn(_ spaces: [DesktopListSpace]) -> some View {
-        let rows = CGFloat(min(spaces.count, Self.maxVisibleRows))
-        return ScrollView {
-            VStack(spacing: Self.buttonSpacing) {
-                desktopButtons(spaces, compact: strip.isCompact)
-            }
-            .frame(maxWidth: .infinity)
+    private func numberColumn(_ groups: [DesktopSpaceGroup], layout: Layout) -> some View {
+        ScrollView {
+            groupedButtons(groups, axis: .vertical, compact: strip.isCompact)
+                .frame(maxWidth: .infinity)
         }
-        .scrollIndicators(!strip.isCompact && spaces.count > Self.maxVisibleRows ? .visible : .hidden)
-        .frame(height: rows * DesktopListButton.height + (rows - 1) * Self.buttonSpacing)
+        .scrollIndicators(!strip.isCompact && layout.columnScrolls ? .visible : .hidden)
+        .frame(height: layout.columnHeight)
         .accessibilityLabel("デスクトップ別")
     }
 
-    private func numberRow(_ spaces: [DesktopListSpace]) -> some View {
-        let width = spaces.reduce(CGFloat.zero) { $0 + DesktopListButton.compactWidth(for: $1) }
-            + CGFloat(spaces.count - 1) * Self.buttonSpacing
-        return ScrollView(.horizontal) {
-            HStack(spacing: Self.buttonSpacing) {
-                desktopButtons(spaces, compact: true)
-            }
+    private func numberRow(_ groups: [DesktopSpaceGroup], layout: Layout) -> some View {
+        ScrollView(.horizontal) {
+            groupedButtons(groups, axis: .horizontal, compact: true)
         }
         .defaultScrollAnchor(.leading)
         .scrollIndicators(.hidden)
-        .frame(width: strip.isHorizontal ? min(132, width) : nil, height: DesktopListButton.height + 1)
+        .frame(width: strip.isHorizontal ? layout.rowWidth : nil, height: Layout.buttonHeight + 1)
         .accessibilityLabel("デスクトップ別")
     }
 
-    private func desktopButtons(_ spaces: [DesktopListSpace], compact: Bool) -> some View {
-        ForEach(spaces) { space in
-            DesktopListButton(space: space, compact: compact) {
-                actions.openWindowSwitcher(space.id, strip)
+    private func groupedButtons(_ groups: [DesktopSpaceGroup], axis: Axis, compact: Bool) -> some View {
+        let groupLayout = stack(axis, spacing: Layout.groupSpacing)
+        let buttonLayout = stack(axis, spacing: Layout.buttonSpacing)
+        return groupLayout {
+            ForEach(groups) { group in
+                buttonLayout {
+                    ForEach(group.items) { space in
+                        DesktopListButton(space: space, compact: compact) {
+                            actions.openWindowSwitcher(space.id, strip)
+                        }
+                    }
+                }
+                .background(group.id == nil ? Color.clear : Color.primary.opacity(0.09), in: RoundedRectangle(cornerRadius: 6))
             }
         }
+    }
+
+    private func stack(_ axis: Axis, spacing: CGFloat) -> AnyLayout {
+        axis == .horizontal ? AnyLayout(HStackLayout(spacing: spacing)) : AnyLayout(VStackLayout(spacing: spacing))
     }
 
     /// まとめボタン。⌥Tab と同じ切り替え画面（すべてのデスクトップ）を開く
@@ -98,16 +104,11 @@ struct StripDesktopList: View {
 }
 
 private struct DesktopListButton: View {
+    private typealias Layout = StripDesktopButtonLayout
     let space: DesktopListSpace
     let compact: Bool
     let action: () -> Void
     @State private var hovering = false
-
-    static let height: CGFloat = 24
-
-    static func compactWidth(for space: DesktopListSpace) -> CGFloat {
-        space.displayNumber == nil ? 26 : 38
-    }
 
     var body: some View {
         Button(action: action) {
@@ -122,14 +123,14 @@ private struct DesktopListButton: View {
     private var label: some View {
         Group {
             if compact {
-                compactLabel.frame(width: Self.compactWidth(for: space))
+                compactLabel.frame(width: Layout.compactWidth(showsDisplayNumber: space.displayNumber != nil))
             } else {
                 fullLabel
             }
         }
         .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(space.isCurrent ? Color.accentColor : Color.primary)
-        .frame(height: Self.height)
+        .frame(height: Layout.buttonHeight)
         .background(space.isCurrent ? StripStyle.selectedFill : hovering ? StripStyle.rowHoverFill : StripStyle.rowFill,
                     in: RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())

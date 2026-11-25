@@ -9,7 +9,8 @@ struct DesktopPickerView: View {
     private typealias Layout = WindowSwitcherLayout
 
     var body: some View {
-        let sections = model.sections
+        let groups = model.displayGroups
+        let sections = groups.flatMap(\.items)
         let item = model.selectedItem(in: sections)
         let selection = item.map { $0.0.rowID($0.1) }
         let desktopNumbers = Dictionary(
@@ -35,29 +36,11 @@ struct DesktopPickerView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: Layout.sectionSpacing) {
-                            ForEach(sections) { section in
-                                VStack(alignment: .leading, spacing: Layout.sectionTitleSpacing) {
-                                    if !section.title.isEmpty {
-                                        sectionTitle(section, number: desktopNumbers[section.id])
-                                    }
-                                    if section.windows.isEmpty {
-                                        Text("ウインドウはありません")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .frame(height: Layout.emptySectionHeight)
-                                    } else if model.appearance == .list {
-                                        VStack(spacing: Layout.listRowSpacing) {
-                                            rows(in: section, selection: selection)
-                                        }
-                                    } else {
-                                        let spacing = Layout.tileSpacing
-                                        let columns = Array(repeating: GridItem(.flexible(), spacing: spacing), count: model.columns)
-                                        LazyVGrid(columns: columns, spacing: spacing) {
-                                            rows(in: section, selection: selection)
-                                        }
-                                    }
-                                }
+                        // 枠の数はディスプレイの数だけ。別の枠にある行へもスクロールできるよう、
+                        // 枠は先に並べ、枠の中のデスクトップと格子を必要な分だけ描く。
+                        VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
+                            ForEach(groups) { group in
+                                displayGroup(group, selection: selection, desktopNumbers: desktopNumbers)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -83,6 +66,65 @@ struct DesktopPickerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator).allowsHitTesting(false))
+    }
+
+    @ViewBuilder
+    private func displayGroup(
+        _ group: DesktopPickerDisplayGroup,
+        selection: DesktopPickerRowID?, desktopNumbers: [DesktopPickerSection.ID: Int]
+    ) -> some View {
+        let content = LazyVStack(alignment: .leading, spacing: Layout.sectionSpacing) {
+            ForEach(group.items) { section in
+                desktopSection(section, number: desktopNumbers[section.id], selection: selection)
+            }
+        }
+        if let display = group.id {
+            VStack(alignment: .leading, spacing: Layout.displayTitleSpacing) {
+                Label(display.title, systemImage: "display")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .frame(height: Layout.displayTitleHeight)
+                    .accessibilityAddTraits(.isHeader)
+                content
+            }
+            .padding(Layout.displayGroupInset)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.12))
+                    .allowsHitTesting(false)
+            }
+        } else {
+            content
+        }
+    }
+
+    private func desktopSection(
+        _ section: DesktopPickerSection, number: Int?, selection: DesktopPickerRowID?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Layout.sectionTitleSpacing) {
+            if !section.title.isEmpty {
+                sectionTitle(section, number: number)
+            }
+            if section.windows.isEmpty {
+                Text("ウインドウはありません")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(height: Layout.emptySectionHeight)
+            } else if model.appearance == .list {
+                VStack(spacing: Layout.listRowSpacing) {
+                    rows(in: section, selection: selection)
+                }
+            } else {
+                let spacing = Layout.tileSpacing
+                let columns = Array(repeating: GridItem(.flexible(), spacing: spacing), count: model.columns)
+                LazyVGrid(columns: columns, spacing: spacing) {
+                    rows(in: section, selection: selection)
+                }
+            }
+        }
     }
 
     /// 上の見出し（題か、打った文字）と、表示・確定方法の切り替え

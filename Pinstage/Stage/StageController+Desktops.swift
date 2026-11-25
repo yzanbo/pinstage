@@ -1,19 +1,30 @@
 import AppKit
 import PinstageCore
 
+/// 複数ディスプレイのデスクトップを同じ画面に出すときの、所属ディスプレイの情報。
+struct DesktopListDisplay: Hashable {
+    let number: Int
+    let title: String
+}
+
+typealias DesktopSpaceGroup = DesktopDisplayGroup<DesktopListDisplay?, DesktopListSpace>
+
+enum DesktopListSurface: Equatable {
+    case windowBar
+    case switcher
+}
+
 /// デスクトップ別の切り替え一覧で使う、ボタンと見出しの情報
 struct DesktopListSpace: Identifiable, Equatable {
     let id: UInt64
     let name: DesktopName
     let isCurrent: Bool
-    let displayName: String?
-    /// 複数画面のデスクトップを一つのバーに出すとき、短いボタンでも所属を区別する番号。
-    let displayNumber: Int?
+    let display: DesktopListDisplay?
+
+    var displayNumber: Int? { display?.number }
 
     var title: String {
-        if let displayNumber {
-            return "\(displayName ?? "ディスプレイ \(displayNumber)") · \(name.title)"
-        }
+        if let display { return "\(display.title) · \(name.title)" }
         return name.title
     }
 
@@ -32,10 +43,10 @@ extension StageController {
     }
 
     /// ウインドウバーはその画面のデスクトップ順。メインにだけ出す設定とショートカットでは、全画面を含む。
-    func desktopListSpaces(on screen: NSScreen, forSwitcher: Bool = false) -> [DesktopListSpace] {
+    func desktopListGroups(on screen: NSScreen, for surface: DesktopListSurface) -> [DesktopSpaceGroup] {
         guard isTrusted, let desktopDisplays else { return [] }
         let display = SkyLight.display(forKey: Self.displayKey(screen), in: desktopDisplays)
-        let allDisplays = forSwitcher || stripSettings.displays == .mainOnly
+        let allDisplays = surface == .switcher || stripSettings.displays == .mainOnly
         let displayed = allDisplays ? desktopDisplays : display.map { [$0] } ?? []
         let displayNames = displayed.count > 1
             ? Dictionary(NSScreen.screens.map { (Self.displayKey($0), $0.localizedName) }, uniquingKeysWith: { first, _ in first })
@@ -45,16 +56,18 @@ extension StageController {
             let displayName = displayNames[source.identifier].map { name in
                 (nameCounts[name] ?? 0) > 1 ? "\(name)（\(index + 1)）" : name
             }
+            let info = displayed.count > 1
+                ? DesktopListDisplay(number: index + 1, title: displayName ?? "ディスプレイ \(index + 1)")
+                : nil
             return source.spaces.compactMap { space in
                 desktopNames[space.id].map { name in
                     DesktopListSpace(id: space.id, name: name, isCurrent: source.current == space.id,
-                                     displayName: displayName,
-                                     displayNumber: displayed.count > 1 ? index + 1 : nil)
+                                     display: info)
                 }
             }
         }
-        guard forSwitcher else { return spaces }
-        return DesktopWindowList<AXUIElement>.puttingCurrentFirst(spaces, current: display?.current, id: \.id)
+        let preferred = surface == .switcher ? display?.current : nil
+        return DesktopSpaceGroup.grouping(spaces, by: \.display, prioritizing: { $0.id == preferred })
     }
 
     /// 並べ替えずに、選んだウインドウをそのデスクトップで前に出す。

@@ -32,6 +32,16 @@ enum StripPreview {
         case desktopList
         /// まとめボタンと各デスクトップのボタンを一緒に出す
         case desktopButtons
+        /// 2 つのディスプレイの個別ボタンを、メインのバーにまとめて出す
+        case desktopDisplayGroups
+
+        var desktopPreview: StageController.PreviewDesktops {
+            switch self {
+            case .desktopList, .desktopButtons: .singleDisplay
+            case .desktopDisplayGroups: .multipleDisplays
+            default: .none
+            }
+        }
     }
 
     /// ストリップのほかに描ける画面
@@ -46,6 +56,7 @@ enum StripPreview {
         case desktopOverview
         case desktopOverviewIcons
         case desktopOverviewThumbnails
+        case desktopDisplayGroups
         /// 設定の「型」のタブ
         case layouts
         /// 設定の「一般」「ストリップ」「ショートカット」「自動化」のタブ
@@ -122,7 +133,8 @@ enum StripPreview {
             CustomLayout(name: "重ねた形", slots: [UnitRect(x: 0, y: 0, width: 0.6, height: 0.7), UnitRect(x: 0.3, y: 0.25, width: 0.7, height: 0.75), UnitRect(x: 0.1, y: 0.5, width: 0.4, height: 0.4)]),
         ]
         let isDesktopPicker = [Screen.desktopPicker, .desktopOverview, .desktopOverviewIcons, .desktopOverviewThumbnails].contains(screen)
-        withSample(scenario: isDesktopPicker ? .desktopList : .normal, customLayouts: layouts) { sample in
+        let scenario: Scenario = screen == .desktopDisplayGroups ? .desktopDisplayGroups : isDesktopPicker ? .desktopList : .normal
+        withSample(scenario: scenario, customLayouts: layouts) { sample in
             let stage = sample.stage
             switch screen {
             case .groupEditor:
@@ -131,10 +143,10 @@ enum StripPreview {
                 write(LayoutEditorView(layout: layouts[1], aspectRatio: 1.6, onSave: { _ in }, onCancel: {}), size: nil, to: url)
             case .search:
                 write(SearchView(model: SearchModel(stage: stage, screen: sample.screen)), size: SearchController.size, to: url)
-            case .desktopPicker, .desktopOverview, .desktopOverviewIcons, .desktopOverviewThumbnails:
+            case .desktopPicker, .desktopOverview, .desktopOverviewIcons, .desktopOverviewThumbnails, .desktopDisplayGroups:
                 let anchored = screen == .desktopPicker
                 let appearance: WindowSwitcherSettings.Appearance = switch screen {
-                case .desktopOverviewIcons: .icons
+                case .desktopOverviewIcons, .desktopDisplayGroups: .icons
                 case .desktopOverviewThumbnails: .thumbnails
                 // ウインドウバーのボタンから開いたときは、初期設定の見た目（アイコンだけ）
                 case .desktopPicker: .icons
@@ -172,7 +184,10 @@ enum StripPreview {
         defaults.removePersistentDomain(forName: defaultsSuite)
         defer { defaults.removePersistentDomain(forName: defaultsSuite) }
         let stage = StageController(defaults: defaults)
-        if scenario == .desktopButtons { stage.stripSettings.desktopButtons = .menuAndButtons }
+        if scenario == .desktopButtons || scenario == .desktopDisplayGroups {
+            stage.stripSettings.desktopButtons = .menuAndButtons
+        }
+        if scenario.desktopPreview == .multipleDisplays { stage.stripSettings.displays = .mainOnly }
         let apps: [(path: String, name: String, title: String)] = [
             ("/Applications/Safari.app", "Safari", "Pinstage の README - GitHub"),
             ("/System/Applications/Mail.app", "メール", "受信 – iCloud"),
@@ -218,7 +233,7 @@ enum StripPreview {
             customLayouts: customLayouts,
             otherDesktop: scenario == .otherDesktop ? [windows[1].id, windows[4].id] : [],
             allDesktops: scenario == .allDesktops ? [windows[1].id, windows[5].id] : [],
-            showDesktopList: scenario == .desktopList || scenario == .desktopButtons,
+            desktopPreview: scenario.desktopPreview,
             // Dock のバッジ（メールは数、メモは点）。デスクトップの一覧の見本で見る
             badges: scenario == .desktopList || scenario == .allDesktops ? ["com.apple.mail": "3", "com.apple.Notes": "•"] : [:]
         )

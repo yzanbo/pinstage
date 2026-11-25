@@ -174,6 +174,10 @@ public enum WindowSwitcherLayout {
     /// デスクトップの見出しの高さと、その下の間
     public static let sectionTitleHeight: CGFloat = 20
     public static let sectionTitleSpacing: CGFloat = 6
+    /// ディスプレイごとの枠。単一のディスプレイや「まとめて表示」では使わない。
+    public static let displayGroupInset: CGFloat = 12
+    public static let displayTitleHeight: CGFloat = 20
+    public static let displayTitleSpacing: CGFloat = 8
     /// デスクトップとデスクトップの間
     public static let sectionSpacing: CGFloat = 14
     /// 一覧の行の間
@@ -230,13 +234,14 @@ public enum WindowSwitcherLayout {
     ///   - titledSections: デスクトップの見出しを出すか（まとめて表示では出さない）
     ///   - columns: 格子の列の数
     ///   - maximumHeight: 高さの上限（画面の使える範囲の高さ × 割合）
+    ///   - displayGroupCount: ディスプレイ名付きの枠を出すグループの数
     ///   - showsNotice: 画面収録の許可の案内を出すか
     ///   - showsFooter: 下に、選んでいるウインドウの名前・選んだ数を出すか
     public static func overviewHeight(
         for appearance: WindowSwitcherSettings.Appearance, size: DisplaySize = .medium, sectionCounts: [Int], titledSections: Bool,
-        columns: Int, maximumHeight: CGFloat, showsNotice: Bool = false, showsFooter: Bool = true
+        columns: Int, maximumHeight: CGFloat, displayGroupCount: Int = 0, showsNotice: Bool = false, showsFooter: Bool = true
     ) -> CGFloat {
-        var content: CGFloat = 0
+        var content = CGFloat(displayGroupCount) * (2 * displayGroupInset + displayTitleHeight + displayTitleSpacing)
         for (index, count) in sectionCounts.enumerated() {
             if index > 0 { content += sectionSpacing }
             if titledSections { content += sectionTitleHeight + sectionTitleSpacing }
@@ -262,11 +267,12 @@ public enum WindowSwitcherLayout {
     }
 
     public static func columns(
-        for appearance: WindowSwitcherSettings.Appearance, size: DisplaySize = .medium, panelWidth: CGFloat
+        for appearance: WindowSwitcherSettings.Appearance, size: DisplaySize = .medium, panelWidth: CGFloat,
+        showsDisplayGroups: Bool = false
     ) -> Int {
         guard appearance != .list else { return 1 }
         let minimum = minimumTileWidth(for: appearance, size: size)
-        let usable = max(0, panelWidth - 2 * inset)
+        let usable = max(0, panelWidth - 2 * (inset + (showsDisplayGroups ? displayGroupInset : 0)))
         return max(1, Int((usable + tileSpacing) / (minimum + tileSpacing)))
     }
 }

@@ -144,6 +144,18 @@ struct WindowSwitcherTests {
             == CGRect(x: -410, y: 60, width: 320, height: 360))
     }
 
+    @Test("ディスプレイの枠と見出しを含めて高さと列数を決める")
+    func displayGroupLayout() {
+        typealias Layout = WindowSwitcherLayout
+        #expect(Layout.columns(for: .icons, panelWidth: 520) == 4)
+        #expect(Layout.columns(for: .icons, panelWidth: 520, showsDisplayGroups: true) == 3)
+        let plain = Layout.overviewHeight(for: .list, sectionCounts: [2, 2], titledSections: true, columns: 1, maximumHeight: 800)
+        let grouped = Layout.overviewHeight(
+            for: .list, sectionCounts: [2, 2], titledSections: true, columns: 1, maximumHeight: 800, displayGroupCount: 2
+        )
+        #expect(grouped - plain == 2 * (2 * Layout.displayGroupInset + Layout.displayTitleHeight + Layout.displayTitleSpacing))
+    }
+
     @Test("大きさは一覧の行・格子のアイコン・サムネイルに反映され、中は従来の寸法")
     func displaySizes() {
         typealias Layout = WindowSwitcherLayout
