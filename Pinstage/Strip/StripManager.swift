@@ -18,6 +18,12 @@ final class StripManager {
     private let actions: AppActions
     /// ディスプレイごと・デスクトップごとのストリップ（訪れたデスクトップの数だけ増える）
     private var strips: [StripController] = []
+    private lazy var windowDragFeedback = StripWindowDragFeedback { [weak self] source, pointer in
+        self?.strips.first {
+            $0.displayKey != source.displayKey && $0.isShown
+                && $0.frame.contains(pointer) && $0.screen.frame.contains(pointer) && $0.isOnActiveSpace
+        }
+    }
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     /// デスクトップを切り替えたあと、切り替えの動きが落ち着くまで確かめ直す
@@ -90,6 +96,7 @@ final class StripManager {
 
     func stop() {
         settleTask?.cancel()
+        windowDragFeedback.finish()
         strips.forEach { $0.close() }
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
@@ -101,6 +108,7 @@ final class StripManager {
     /// （2 回目からは、そのデスクトップに置いてあるストリップが、前に覚えた一覧のまま切り替えと一緒に出てくる）
     private func spaceChanged() {
         actions.closeDesktopList(nil)
+        windowDragFeedback.finish()
         trace("activeSpaceDidChange", onScreen: CurrentSpace.ownWindowNumbersOnScreen())
         stage.noteSpaceChanged()
         if usesSystemSpaces {
@@ -271,6 +279,7 @@ final class StripManager {
 
     private func addStrip(on screen: NSScreen, space: UInt64? = nil) {
         let strip = StripController(screen: screen, spaceID: space, stage: stage, thumbnails: thumbnails, shortcuts: shortcuts, actions: actions)
+        strip.windowDragFeedback = windowDragFeedback
         strip.onShow = { [weak self] in self?.thumbnails.captureNow() }
         // 一覧は空で始まり、すぐあとの読み直しで、このデスクトップの一覧を覚える（前のデスクトップの一覧を出さない）
         strips.append(strip)
@@ -315,6 +324,7 @@ final class StripManager {
 
     private func rebuild() {
         actions.closeDesktopList(nil)
+        windowDragFeedback.finish()
         // ほかのデスクトップに置いたストリップも、いったんすべて閉じる（ディスプレイが変わると、置き場所が合わなくなるため）。
         // ほかのデスクトップには、次に訪れたときに作り直す
         strips.forEach { $0.close() }

@@ -29,6 +29,14 @@ struct StripView: View {
                 .desktopListContextMenu(stage: stage)
         }
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.separator).allowsHitTesting(false))
+        .overlay {
+            if strip.spaceState.isWindowDropTarget {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.09))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.accentColor, lineWidth: 2))
+                    .allowsHitTesting(false)
+            }
+        }
         // 幅を変えるつまみは、ステージの側の縁に出す（右のストリップなら左の縁）
         .overlay(alignment: strip.edge == .right ? .leading : .trailing) {
             // 上下のストリップの高さは、形式で決まるので、つまみは出さない

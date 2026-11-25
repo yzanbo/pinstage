@@ -26,6 +26,22 @@ final class ReorderState {
     func isMoving(_ index: Int) -> Bool {
         draggedIndex == index || followers.contains(index)
     }
+
+    func drag(_ index: Int, with cluster: ClosedRange<Int>?, offset: CGSize) {
+        if draggedIndex != index { draggedIndex = index }
+        if let cluster, cluster.count > 1 {
+            let next = Set(cluster).subtracting([index])
+            if followers != next { followers = next }
+            if followOffset != offset { followOffset = offset }
+        }
+    }
+
+    func finishDrag() {
+        dropIndex = nil
+        draggedIndex = nil
+        followers = []
+        followOffset = .zero
+    }
 }
 
 /// 一覧の並べ方（落とす位置の決め方と、落とす位置に引く線の向きが変わる）
@@ -65,11 +81,15 @@ struct ReorderDrag: ViewModifier {
     var onDropOutside: (() -> Void)?
     /// グループの行の上で離した（ウインドウの行だけ。nil ならグループには入れない）
     var onDropOnGroup: ((UUID) -> Void)?
+    /// ウインドウの行だけ、バーの外にポインタについて動く見本を出す。
+    var makeWindowDragPreview: (() -> StripWindowDragPreview)?
     @State private var offset: CGSize = .zero
+    @State private var didDrag = false
+    @GestureState private var tracksGesture = false
 
     /// いま重ねているグループ（グループに入れられるときだけ）
-    private func hoveredGroup() -> UUID? {
-        guard onDropOnGroup != nil, let point = strip.pointerInContent() else { return nil }
+    private func hoveredGroup(at pointer: CGPoint) -> UUID? {
+        guard onDropOnGroup != nil, strip.frame.contains(pointer), let point = strip.pointerInContent(at: pointer) else { return nil }
         return strip.groupTargets.group(at: point)
     }
 
@@ -80,12 +100,11 @@ struct ReorderDrag: ViewModifier {
     private static let outsideTolerance: CGFloat = 24
 
     /// ポインタがウインドウバーの中（並べ替える範囲）にあるか。並ぶ向きと直角の側に、少しはみ出してもよい
-    private var isPointerInStrip: Bool {
-        let tolerance = Self.outsideTolerance
-        let area = layout == .columns
-            ? strip.frame.insetBy(dx: 0, dy: -tolerance)
-            : strip.frame.insetBy(dx: -tolerance, dy: 0)
-        return area.contains(NSEvent.mouseLocation)
+    private func isPointerInStrip(_ pointer: CGPoint) -> Bool {
+        StripDragGeometry.isInReorderArea(
+            pointer: pointer, strip: strip.frame, display: strip.screen.frame,
+            horizontal: layout == .columns, tolerance: Self.outsideTolerance
+        )
     }
 
     /// 線を出したか・出さなかった理由を、開発用の記録に残す（実機のドラッグでしか起きない不具合を調べるため。同じ内容が続く間は書かない）
@@ -106,19 +125,24 @@ struct ReorderDrag: ViewModifier {
             .opacity(offset == .zero ? 1 : 0.85)
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named(space))
+                    .updating($tracksGesture) { _, tracking, _ in tracking = true }
                     .onChanged { value in
-                        guard hypot(value.translation.width, value.translation.height) > Self.threshold else { return }
+                        guard didDrag || hypot(value.translation.width, value.translation.height) > Self.threshold else { return }
+                        didDrag = true
                         strip.isDragging = true
                         offset = value.translation
-                        // 変わったときだけ入れる（同じ値でも入れ直すと、見ている行がすべて描き直される）
-                        if reorder.draggedIndex != index { reorder.draggedIndex = index }
-                        let group = hoveredGroup()
+                        let pointer = NSEvent.mouseLocation
+                        if let makeWindowDragPreview {
+                            strip.windowDragFeedback?.update(from: strip, pointer: pointer, preview: makeWindowDragPreview)
+                        }
+                        reorder.drag(index, with: cluster, offset: value.translation)
+                        let group = hoveredGroup(at: pointer)
                         if onDropOnGroup != nil { strip.groupTargets.hovered = group }
                         if group != nil {
                             // グループの上では、並べ替えの線を出さない
                             reorder.dropIndex = nil
                             trace("グループの上")
-                        } else if isPointerInStrip {
+                        } else if isPointerInStrip(pointer) {
                             let target = switch layout {
                             case .rows: ListReorder.dropIndex(forY: value.location.y, frames: reorder.frames, count: count)
                             case .columns: ListReorder.dropIndex(forX: value.location.x, frames: reorder.frames, count: count)
@@ -133,39 +157,48 @@ struct ReorderDrag: ViewModifier {
                             reorder.dropIndex = nil
                             trace("ウインドウバーの外")
                         }
-                        // 同じアプリのまとまりは、ドラッグしている間ずっと、まとめて動かす
-                        if let cluster, cluster.count > 1 {
-                            let followers = Set(cluster).subtracting([index])
-                            if reorder.followers != followers { reorder.followers = followers }
-                            reorder.followOffset = value.translation
-                        }
                     }
                     .onEnded { value in
-                        let moved = hypot(value.translation.width, value.translation.height) > Self.threshold
+                        let moved = didDrag || hypot(value.translation.width, value.translation.height) > Self.threshold
+                        let pointer = NSEvent.mouseLocation
                         let drop = reorder.dropIndex
-                        let group = moved ? hoveredGroup() : nil
-                        offset = .zero
-                        strip.isDragging = false
-                        reorder.dropIndex = nil
-                        reorder.draggedIndex = nil
-                        reorder.followers = []
-                        reorder.followOffset = .zero
-                        if onDropOnGroup != nil { strip.groupTargets.hovered = nil }
+                        let group = moved ? hoveredGroup(at: pointer) : nil
+                        resetDrag()
                         if !moved {
                             onTap()
                         } else if let group {
                             onDropOnGroup?(group)
-                        } else if !isPointerInStrip {
+                        } else if !isPointerInStrip(pointer) {
                             onDropOutside?()
                         } else if let drop {
                             withAnimation(.snappy(duration: 0.2)) { onMove(drop) }
                         }
                     }
             )
+            .onChange(of: tracksGesture) {
+                // キャンセルでは onEnded が届かない。正常終了の処理を優先し、その後も残っていれば消す。
+                if !tracksGesture, didDrag {
+                    DispatchQueue.main.async {
+                        if !tracksGesture, didDrag { resetDrag() }
+                    }
+                }
+            }
+            .onDisappear {
+                if didDrag { resetDrag() }
+            }
             // 行の枠は、ずらす前の位置で覚える。必ず、ずらし（offset）の外側で測る。
             // 内側で測ると、ずらした量が枠に入り、ドラッグしている行（と、一緒に動く行）の枠がポインタについて動く。
             // すると、落とす位置の判定が自分の行に引っかかって「動かない位置」になり、線が出ない・ちらつく（行の上半分をつかむと起きる）
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(space)) } action: { reorder.frames[index] = $0 }
+    }
+
+    private func resetDrag() {
+        didDrag = false
+        offset = .zero
+        strip.isDragging = false
+        reorder.finishDrag()
+        if onDropOnGroup != nil { strip.groupTargets.hovered = nil }
+        if makeWindowDragPreview != nil { strip.windowDragFeedback?.finish(from: strip) }
     }
 }
 

@@ -10,6 +10,8 @@ final class StripSpaceState {
     var windowIDs: Set<AXUIElement> = []
     /// 幅を変えるドラッグの途中の幅（ドラッグしていなければ nil）。途中でも、その幅に合う形で描く
     var resizingWidth: CGFloat?
+    /// 別のディスプレイのバーからウインドウを重ねている間、枠を光らせる。
+    var isWindowDropTarget = false
 }
 
 /// 1 つのディスプレイの、1 つのデスクトップのストリップ（画面の端の、ウインドウとグループの一覧）を出す・隠す
@@ -32,6 +34,8 @@ final class StripController {
     private(set) var isShown = false
     /// ストリップから行をドラッグしている途中か（その間は隠さない）
     var isDragging = false
+    /// バーの外を移動するウインドウの見本（すべてのバーで共有）。
+    weak var windowDragFeedback: StripWindowDragFeedback?
     /// デスクトップ一覧へポインタを動かしている間は、自動で隠さない。
     var desktopListIsOpen = false
     /// 隠していたストリップを出した（サムネイルをすぐ撮り直すため）
@@ -161,9 +165,9 @@ final class StripController {
     }
 
     /// いまのポインタの位置（ストリップの中身の座標。左上が原点。GroupDropTargets.space と同じ）
-    func pointerInContent() -> CGPoint? {
+    func pointerInContent(at pointer: CGPoint = NSEvent.mouseLocation) -> CGPoint? {
         guard let view = panel.contentView else { return nil }
-        let inWindow = panel.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let inWindow = panel.convertPoint(fromScreen: pointer)
         let local = view.convert(inWindow, from: nil)
         return CGPoint(x: local.x, y: view.isFlipped ? local.y : view.bounds.height - local.y)
     }
@@ -186,6 +190,7 @@ final class StripController {
     /// 閉じる（ディスプレイを外したとき・設定を変えたとき）
     func close() {
         closeDesktopList()
+        windowDragFeedback?.finish(from: self)
         pointerTimer?.invalidate()
         panel.orderOut(nil)
         panel.contentView = nil
@@ -225,6 +230,7 @@ final class StripController {
     private func tick() {
         finishResizeIfReleased()
         trackPointer()
+        windowDragFeedback?.refreshDropTarget(from: self)
     }
 
     /// 内側の縁のドラッグを離したのに、終わりの知らせが届かなかったとき（ドラッグの途中でストリップの形が変わると、届かないことがある）は、
@@ -281,7 +287,10 @@ final class StripController {
     }
 
     private func placePanel(shown: Bool, animated: Bool) {
-        if !shown { closeDesktopList() }
+        if !shown {
+            closeDesktopList()
+            windowDragFeedback?.finish(from: self)
+        }
         let wasShown = isShown
         isShown = shown
         if shown, !wasShown { onShow?() }

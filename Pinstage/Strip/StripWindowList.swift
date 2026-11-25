@@ -222,7 +222,8 @@ private struct WindowRow: View {
                 // ウインドウバーの外（ステージ）で離したら、ステージに足す（まとめて動かしているときは、まとまりのウインドウをすべて）
                 onDropOutside: { stage.add(draggedItems, on: StageController.screenUnderPointer ?? strip.screen) },
                 // グループの行の上で離したら、そのグループに足す（同じく、まとまりのウインドウをすべて）
-                onDropOnGroup: { group in draggedItems.forEach { stage.addWindow($0, toGroup: group) } }
+                onDropOnGroup: { group in draggedItems.forEach { stage.addWindow($0, toGroup: group) } },
+                makeWindowDragPreview: { StripWindowDragPreview(title: item.displayTitle, icon: item.icon, count: draggedItems.count) }
             ))
             // スクロールして見えているかを覚える（サムネイルは見えている行だけ撮る）。
             // 見えてきた行のサムネイルがまだなければ、すぐ撮る

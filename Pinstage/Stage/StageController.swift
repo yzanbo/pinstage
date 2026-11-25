@@ -319,8 +319,11 @@ final class StageController {
 
     /// ポインタのあるディスプレイ（ショートカットで操作するときに使う）
     static var screenUnderPointer: NSScreen? {
-        let pointer = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) } ?? NSScreen.primary
+        screen(at: NSEvent.mouseLocation) ?? NSScreen.primary
+    }
+
+    static func screen(at point: CGPoint) -> NSScreen? {
+        NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) }
     }
 
     // MARK: - ステージの操作（ストリップから）
