@@ -107,7 +107,7 @@ final class StripManager {
     /// デスクトップを切り替えた。初めて訪れたデスクトップには、ディスプレイごとにストリップを作る
     /// （2 回目からは、そのデスクトップに置いてあるストリップが、前に覚えた一覧のまま切り替えと一緒に出てくる）
     private func spaceChanged() {
-        actions.closeDesktopList(nil)
+        actions.closeWindowSwitcher(nil)
         windowDragFeedback.finish()
         trace("activeSpaceDidChange", onScreen: CurrentSpace.ownWindowNumbersOnScreen())
         stage.noteSpaceChanged()
@@ -323,7 +323,7 @@ final class StripManager {
     // MARK: - 作り直す
 
     private func rebuild() {
-        actions.closeDesktopList(nil)
+        actions.closeWindowSwitcher(nil)
         windowDragFeedback.finish()
         // ほかのデスクトップに置いたストリップも、いったんすべて閉じる（ディスプレイが変わると、置き場所が合わなくなるため）。
         // ほかのデスクトップには、次に訪れたときに作り直す
@@ -342,9 +342,6 @@ final class StripManager {
 
     private func settingsChanged(from old: StripSettings) {
         let new = stage.stripSettings
-        if new.showsDesktopList != old.showsDesktopList || new.edge != old.edge || new.effectiveThickness != old.effectiveThickness {
-            strips.forEach { $0.closeDesktopList() }
-        }
         // 出すディスプレイを変えたら見分け直し、「同じアプリのウインドウをまとめる」を変えたら、読み直して並びを合わせる
         if new.displays != old.displays
             || new.groupsSameApp != old.groupsSameApp {

@@ -69,10 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         actions.openSettings = { [weak self] tab in self?.settingsWindow.show(tab: tab) }
         actions.createLayout = { [weak self] slots in self?.editor.createNew(from: slots) }
         actions.openSearch = { [weak self] in self?.search.show() }
-        actions.openDesktopList = { [weak self] id, anchor, strip in
-            self?.desktopPicker.show(desktop: id, anchor: anchor, strip: strip)
+        actions.openWindowSwitcher = { [weak self] desktop, strip in
+            self?.desktopPicker.show(desktop: desktop, from: strip)
         }
-        actions.closeDesktopList = { [weak self] strip in self?.desktopPicker.close(anchoredTo: strip) }
+        actions.closeWindowSwitcher = { [weak self] strip in self?.desktopPicker.close(openedFrom: strip) }
         actions.editGroup = { [weak self] group in self?.groupEditor.edit(group) }
         // 自動化（URL・「ショートカット」アプリ）から操作できるようにする
         AutomationCenter.shared = automation
@@ -117,7 +117,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .search:
             search.toggle()
         case .desktopList:
-            desktopPicker.toggleOverview()
+            if let shortcut = shortcuts.shortcut(for: .desktopList) {
+                desktopPicker.openFromShortcut(modifiers: shortcut.menuModifierMask)
+            }
         case .toggleStrip:
             strips.toggle()
         case .saveStageAsGroup:

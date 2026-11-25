@@ -8,10 +8,11 @@ final class AppActions {
     var createLayout: ([UnitRect]) -> Void = { _ in }
     /// 検索の欄を出す
     var openSearch: () -> Void = {}
-    /// ウインドウバーのボタンの枠に、デスクトップの一覧を出す（枠は画面座標）。
-    var openDesktopList: (UInt64, CGRect, StripController) -> Void = { _, _, _ in }
+    /// ウインドウバーのデスクトップのボタンから、⌥Tab と同じ切り替え画面を、そのウインドウバーのディスプレイに出す。
+    /// デスクトップを渡すと、そのデスクトップの最初のウインドウを選んで開く（nil なら、まとめボタン）
+    var openWindowSwitcher: (UInt64?, StripController) -> Void = { _, _ in }
     /// ストリップを指定すれば、そのストリップから開いた一覧だけを閉じる。
-    var closeDesktopList: (StripController?) -> Void = { _ in }
+    var closeWindowSwitcher: (StripController?) -> Void = { _ in }
     /// グループの編集画面を開く
     var editGroup: (StageGroup) -> Void = { _ in }
 }

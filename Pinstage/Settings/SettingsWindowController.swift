@@ -99,3 +99,5 @@ extension StripDisplays: SettingsOption {}
 extension SingleWindowSize: SettingsOption {}
 extension WindowSwitcherSettings.Grouping: SettingsOption {}
 extension WindowSwitcherSettings.Appearance: SettingsOption {}
+extension WindowSwitcherSettings.DisplaySize: SettingsOption {}
+extension WindowSwitcherSettings.Confirmation: SettingsOption {}

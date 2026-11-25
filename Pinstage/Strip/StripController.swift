@@ -36,8 +36,8 @@ final class StripController {
     var isDragging = false
     /// バーの外を移動するウインドウの見本（すべてのバーで共有）。
     weak var windowDragFeedback: StripWindowDragFeedback?
-    /// デスクトップ一覧へポインタを動かしている間は、自動で隠さない。
-    var desktopListIsOpen = false
+    /// このウインドウバーからウィンドウスイッチャーを開いている間は、自動で隠さない。
+    var windowSwitcherIsOpen = false
     /// 隠していたストリップを出した（サムネイルをすぐ撮り直すため）
     var onShow: (() -> Void)?
     /// このストリップが置かれたデスクトップのウインドウの一覧
@@ -158,12 +158,6 @@ final class StripController {
         panel.frame
     }
 
-    /// SwiftUI で測ったボタンの枠（左上が原点）を、AppKit の画面座標へ移す。
-    func screenRect(for rect: CGRect) -> CGRect {
-        panel.convertToScreen(CGRect(x: rect.minX, y: panel.frame.height - rect.maxY,
-                                     width: rect.width, height: rect.height))
-    }
-
     /// いまのポインタの位置（ストリップの中身の座標。左上が原点。GroupDropTargets.space と同じ）
     func pointerInContent(at pointer: CGPoint = NSEvent.mouseLocation) -> CGPoint? {
         guard let view = panel.contentView else { return nil }
@@ -189,15 +183,15 @@ final class StripController {
 
     /// 閉じる（ディスプレイを外したとき・設定を変えたとき）
     func close() {
-        closeDesktopList()
+        closeWindowSwitcher()
         windowDragFeedback?.finish(from: self)
         pointerTimer?.invalidate()
         panel.orderOut(nil)
         panel.contentView = nil
     }
 
-    func closeDesktopList() {
-        if desktopListIsOpen { actions.closeDesktopList(self) }
+    func closeWindowSwitcher() {
+        if windowSwitcherIsOpen { actions.closeWindowSwitcher(self) }
     }
 
     /// 設定に合わせて、出す・隠す。
@@ -243,7 +237,7 @@ final class StripController {
 
     /// 自動で隠すとき、ポインタの位置で出す・隠す
     private func trackPointer() {
-        guard stage.stripSettings.mode == .autoHide, !isDragging, !desktopListIsOpen else { return }
+        guard stage.stripSettings.mode == .autoHide, !isDragging, !windowSwitcherIsOpen else { return }
         let pointer = NSEvent.mouseLocation
         if !isShown {
             // ポインタの位置を先に比べる（表に出ているデスクトップかを調べるのは、端に寄せたときだけで済む）
@@ -287,8 +281,8 @@ final class StripController {
     }
 
     private func placePanel(shown: Bool, animated: Bool) {
+        // 切り替え画面は画面の真ん中に出すので、ウインドウバーを隠しても閉じない（自動で隠すときは、開いている間は隠さない）
         if !shown {
-            closeDesktopList()
             windowDragFeedback?.finish(from: self)
         }
         let wasShown = isShown

@@ -3,7 +3,7 @@ import Observation
 import PinstageCore
 import ScreenCaptureKit
 
-/// ストリップとウインドウ切り替え画面に出すサムネイル
+/// ストリップとウィンドウスイッチャーに出すサムネイル
 ///
 /// ScreenCaptureKit でウインドウだけを撮る（ほかのウインドウに隠れていても、そのウインドウの中身が撮れる）。
 /// 画面収録の許可が要る。ストリップは少しずつ撮り直し、切り替え画面では見えているカードの足りない画像だけを撮る。
@@ -57,6 +57,17 @@ final class ThumbnailStore {
     /// 画面収録の許可を問い合わせ直す（システム設定で変えて戻ってきたとき）
     func refreshPermission() {
         hasPermission = CGPreflightScreenCaptureAccess()
+    }
+
+    /// 開くときは許可を確認するだけ。サムネイルに設定を変更したときだけ、必要なら許可を求める。
+    func windowSwitcherAppearance(
+        _ preferred: WindowSwitcherSettings.Appearance, requestsPermission: Bool = false
+    ) -> WindowSwitcherSettings.Appearance {
+        if preferred == .thumbnails {
+            refreshPermission()
+            if requestsPermission, !hasPermission { requestPermission() }
+        }
+        return preferred.displayed(hasScreenCapturePermission: hasPermission)
     }
 
     /// いま撮り直す

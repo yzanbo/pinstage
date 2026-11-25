@@ -582,6 +582,20 @@ final class StageController {
         AXWindow.raise(item.id, pid: item.pid)
     }
 
+    // MARK: - ウィンドウスイッチャーからの操作
+
+    /// 選んだウインドウだけを、ステージに並べる（切り替え画面で、スペースで選んだもの。選んだ順に並べる）
+    func present(_ items: [WindowItem], on screen: NSScreen) {
+        guard !items.isEmpty else { return }
+        updateStage(on: screen, apply: true) { $0.selection.replace(with: items.map(\.id)) }
+    }
+
+    /// ウインドウをしまう（Dock へ最小化する）
+    func minimize(_ item: WindowItem) {
+        AXUIElementSetAttributeValue(item.id, kAXMinimizedAttribute as CFString, true as CFBoolean)
+        refreshSoon()
+    }
+
     // MARK: - 閉じる・終了する
 
     /// ウインドウを閉じる（保存していなければ、アプリが聞く）
@@ -737,7 +751,10 @@ final class StageController {
             desktopDisplays = [SkyLight.Display(identifier: Self.displayKey(screen),
                                                 spaces: ids.map { .init(id: $0, isFullScreen: false) }, current: 1)]
             desktopNames = Dictionary(uniqueKeysWithValues: ids.map { ($0, DesktopName(number: Int($0))) })
-            windowSpaces = Dictionary(uniqueKeysWithValues: windows.enumerated().map { ($1.id, [$0 < 3 ? 1 : 2]) })
+            // 最初の 3 つはデスクトップ 1、残りはデスクトップ 2。最後の 1 つは、すべてのデスクトップに割り当てたもの（印を見るため）
+            windowSpaces = Dictionary(uniqueKeysWithValues: windows.enumerated().map { index, window in
+                (window.id, index == windows.count - 1 ? Set<UInt64>(ids) : [index < 3 ? 1 : 2])
+            })
         }
         updateStage(on: screen, apply: false) { stage in
             stage.selection.replace(with: onStage)

@@ -28,7 +28,7 @@ enum StripPreview {
         case sameApp
         /// すべてのデスクトップに割り当てたウインドウがある
         case allDesktops
-        /// デスクトップ別のウインドウ一覧を開くボタンを出す
+        /// ウィンドウスイッチャーを開くボタンを出す
         case desktopList
     }
 
@@ -134,13 +134,17 @@ enum StripPreview {
                 let appearance: WindowSwitcherSettings.Appearance = switch screen {
                 case .desktopOverviewIcons: .icons
                 case .desktopOverviewThumbnails: .thumbnails
+                // ウインドウバーのボタンから開いたときは、初期設定の見た目（アイコンだけ）
+                case .desktopPicker: .icons
                 default: .list
                 }
                 if screen == .desktopOverviewIcons { stage.windowSwitcherSettings.grouping = .flat }
-                let size = anchored ? CGSize(width: 320, height: 169) : WindowSwitcherLayout.overviewSize(for: appearance)
-                write(DesktopPickerController.preview(stage: stage, screen: sample.screen, desktop: anchored ? 2 : nil,
-                                                      size: size, appearance: appearance),
-                      size: size, to: url)
+                // 画面の上の切り替えに、描いている見た目が選ばれているように
+                stage.windowSwitcherSettings.appearance = appearance
+                // ウインドウバーのボタン（デスクトップ 2）から開いたときは、そのデスクトップの最初のウインドウを選んで開く
+                let preview = DesktopPickerController.preview(stage: stage, screen: sample.screen, focusing: anchored ? 2 : nil,
+                                                              appearance: appearance)
+                write(preview.view, size: preview.size, to: url)
             case .layouts:
                 let view = LayoutsSettingsView(stage: stage, editor: LayoutEditorWindowController(stage: stage))
                     .frame(width: 560, height: 360)

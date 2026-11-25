@@ -82,7 +82,7 @@ public enum ShortcutAction: String, CaseIterable, Codable, Sendable, Identifiabl
     public var title: String {
         switch self {
         case .search: "ウインドウ・グループを検索"
-        case .desktopList: "デスクトップ別のウインドウ一覧を開く"
+        case .desktopList: "\(WindowSwitcherSettings.title)を開く"
         case .toggleStrip: "ウインドウバーを出す・隠す"
         case .saveStageAsGroup: "ステージをグループとして保存"
         case .recordScreenAsGroup: "見えている画面をグループとして記録"
