@@ -31,11 +31,12 @@ extension StageController {
         return thumbnails.windowSwitcherAppearance(preferred, requestsPermission: changed)
     }
 
-    /// ウインドウバーのボタンはその画面のデスクトップ順。スイッチャーでは全画面を含む。
+    /// ウインドウバーはその画面のデスクトップ順。メインにだけ出す設定とショートカットでは、全画面を含む。
     func desktopListSpaces(on screen: NSScreen, forSwitcher: Bool = false) -> [DesktopListSpace] {
         guard isTrusted, let desktopDisplays else { return [] }
         let display = SkyLight.display(forKey: Self.displayKey(screen), in: desktopDisplays)
-        let displayed = forSwitcher ? desktopDisplays : display.map { [$0] } ?? []
+        let allDisplays = forSwitcher || stripSettings.displays == .mainOnly
+        let displayed = allDisplays ? desktopDisplays : display.map { [$0] } ?? []
         let displayNames = displayed.count > 1
             ? Dictionary(NSScreen.screens.map { (Self.displayKey($0), $0.localizedName) }, uniquingKeysWith: { first, _ in first })
             : [:]

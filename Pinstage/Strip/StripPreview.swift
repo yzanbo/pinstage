@@ -30,6 +30,8 @@ enum StripPreview {
         case allDesktops
         /// ウィンドウスイッチャーを開くボタンを出す
         case desktopList
+        /// まとめボタンと各デスクトップのボタンを一緒に出す
+        case desktopButtons
     }
 
     /// ストリップのほかに描ける画面
@@ -170,6 +172,7 @@ enum StripPreview {
         defaults.removePersistentDomain(forName: defaultsSuite)
         defer { defaults.removePersistentDomain(forName: defaultsSuite) }
         let stage = StageController(defaults: defaults)
+        if scenario == .desktopButtons { stage.stripSettings.desktopButtons = .menuAndButtons }
         let apps: [(path: String, name: String, title: String)] = [
             ("/Applications/Safari.app", "Safari", "Pinstage の README - GitHub"),
             ("/System/Applications/Mail.app", "メール", "受信 – iCloud"),
@@ -215,7 +218,7 @@ enum StripPreview {
             customLayouts: customLayouts,
             otherDesktop: scenario == .otherDesktop ? [windows[1].id, windows[4].id] : [],
             allDesktops: scenario == .allDesktops ? [windows[1].id, windows[5].id] : [],
-            showDesktopList: scenario == .desktopList
+            showDesktopList: scenario == .desktopList || scenario == .desktopButtons
         )
         body(Sample(stage: stage, windows: windows, groups: groups, screen: screen))
     }

@@ -96,6 +96,7 @@ extension StripEdge: SettingsOption {}
 extension StripItemSize: SettingsOption {}
 extension StripIconSize: SettingsOption {}
 extension StripDisplays: SettingsOption {}
+extension StripDesktopButtons: SettingsOption {}
 extension SingleWindowSize: SettingsOption {}
 extension WindowSwitcherSettings.Grouping: SettingsOption {}
 extension WindowSwitcherSettings.Appearance: SettingsOption {}

@@ -86,6 +86,12 @@ struct StripSettingsView: View {
                         info: "ウインドウバーにデスクトップごとのボタンを並べます。ボタンを押すと、\(WindowSwitcherSettings.title)がそのデスクトップの最初のウインドウを選んだ状態で開きます。オフでも、ショートカットから開けます。"
                     )
                 }
+                OptionPicker(
+                    "デスクトップボタンの並べ方",
+                    info: "「自動」は従来どおり、細い帯ではまとめボタン、それ以外では番号を横に並べます。「まとめ＋個別ボタン」は、まとめボタンと各デスクトップを直接開くボタンを一緒に表示します。",
+                    selection: $stage.stripSettings.desktopButtons
+                )
+                .disabled(!stage.stripSettings.showsDesktopList)
                 Toggle(isOn: $stage.stripSettings.groupsSameApp) {
                     SettingTitle(
                         "同じアプリのウインドウをまとめる",

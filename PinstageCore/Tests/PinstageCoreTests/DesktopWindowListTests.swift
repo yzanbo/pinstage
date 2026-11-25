@@ -35,4 +35,29 @@ struct DesktopWindowListTests {
         settings.save(to: defaults)
         #expect(!StripSettings(defaults: defaults).showsDesktopList)
     }
+
+    @Test("自動は従来どおり。まとめのみ・まとめと個別を選べば細さにかかわらずその形になる")
+    func desktopButtonPresentation() {
+        #expect(StripDesktopButtons.automatic.presentation(isCompact: true) == .overview)
+        #expect(StripDesktopButtons.automatic.presentation(isCompact: false) == .desktopNumbers)
+        for compact in [false, true] {
+            #expect(StripDesktopButtons.menuOnly.presentation(isCompact: compact) == .overview)
+            #expect(StripDesktopButtons.menuAndButtons.presentation(isCompact: compact) == .overviewAndDesktopNumbers)
+        }
+    }
+
+    @Test("ボタンの並べ方は未設定なら自動。表示がオフでも選んだ並べ方は保持する")
+    func desktopButtonPreference() throws {
+        let suite = "PinstageTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: "strip.showsDesktopList")
+        var settings = StripSettings(defaults: defaults)
+        #expect(settings.desktopButtons == .automatic)
+        settings.desktopButtons = .menuAndButtons
+        settings.save(to: defaults)
+        let restored = StripSettings(defaults: defaults)
+        #expect(restored.desktopButtons == .menuAndButtons)
+        #expect(!restored.showsDesktopList)
+    }
 }

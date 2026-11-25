@@ -66,6 +66,36 @@ public enum StripDisplays: String, CaseIterable, Codable, Sendable, Identifiable
     }
 }
 
+/// ウインドウバーのデスクトップボタンの並べ方。ショートカットで開く一覧の設定とは別。
+public enum StripDesktopButtons: String, CaseIterable, Sendable {
+    case automatic
+    case menuOnly
+    case menuAndButtons
+
+    public var title: String {
+        switch self {
+        case .automatic: "自動"
+        case .menuOnly: "まとめボタンのみ"
+        case .menuAndButtons: "まとめ＋個別ボタン"
+        }
+    }
+
+    public enum Presentation: Equatable {
+        case overview, desktopNumbers, overviewAndDesktopNumbers
+
+        public var showsOverview: Bool { self != .desktopNumbers }
+        public var showsDesktopNumbers: Bool { self != .overview }
+    }
+
+    public func presentation(isCompact: Bool) -> Presentation {
+        switch self {
+        case .automatic: isCompact ? .overview : .desktopNumbers
+        case .menuOnly: .overview
+        case .menuAndButtons: .overviewAndDesktopNumbers
+        }
+    }
+}
+
 /// ストリップの設定（UserDefaults に保存する）
 public struct StripSettings: Equatable, Sendable {
     public var mode: StripMode
@@ -86,6 +116,7 @@ public struct StripSettings: Equatable, Sendable {
     public var groupsSameApp: Bool
     /// 仮想デスクトップごとのウインドウ一覧を開くボタンを出すか
     public var showsDesktopList: Bool
+    public var desktopButtons: StripDesktopButtons
     /// 左右に出したときのストリップの幅（pt。ステージの側の縁をドラッグして変える）。一覧・サムネイルの幅
     public var stripWidth: CGFloat {
         didSet { stripWidth = StripGeometry.clampedWidth(stripWidth) }
@@ -113,10 +144,12 @@ public struct StripSettings: Equatable, Sendable {
         gridWidth: CGFloat = StripGeometry.defaultWidth,
         groupsSameApp: Bool = true,
         stageGap: CGFloat = StripGeometry.stageGap,
-        showsDesktopList: Bool = true
+        showsDesktopList: Bool = true,
+        desktopButtons: StripDesktopButtons = .automatic
     ) {
         self.groupsSameApp = groupsSameApp
         self.showsDesktopList = showsDesktopList
+        self.desktopButtons = desktopButtons
         self.stageGap = Self.clampedGap(stageGap)
         self.mode = mode
         self.edge = edge
@@ -190,6 +223,7 @@ public struct StripSettings: Equatable, Sendable {
         static let keepsWindowsOffStrip = "strip.keepsWindowsOffStrip"
         static let groupsSameApp = "strip.groupsSameApp"
         static let showsDesktopList = "strip.showsDesktopList"
+        static let desktopButtons = "strip.desktopButtons"
         static let stageGap = "strip.stageGap"
     }
 
@@ -208,7 +242,8 @@ public struct StripSettings: Equatable, Sendable {
             gridWidth: (defaults.object(forKey: Key.gridWidth) as? Double).map { CGFloat($0) } ?? fallback.gridWidth,
             groupsSameApp: defaults.object(forKey: Key.groupsSameApp) as? Bool ?? fallback.groupsSameApp,
             stageGap: (defaults.object(forKey: Key.stageGap) as? Double).map { CGFloat($0) } ?? fallback.stageGap,
-            showsDesktopList: defaults.object(forKey: Key.showsDesktopList) as? Bool ?? fallback.showsDesktopList
+            showsDesktopList: defaults.object(forKey: Key.showsDesktopList) as? Bool ?? fallback.showsDesktopList,
+            desktopButtons: defaults.string(forKey: Key.desktopButtons).flatMap(StripDesktopButtons.init(rawValue:)) ?? fallback.desktopButtons
         )
     }
 
@@ -223,6 +258,7 @@ public struct StripSettings: Equatable, Sendable {
         defaults.set(keepsWindowsOffStrip, forKey: Key.keepsWindowsOffStrip)
         defaults.set(groupsSameApp, forKey: Key.groupsSameApp)
         defaults.set(showsDesktopList, forKey: Key.showsDesktopList)
+        defaults.set(desktopButtons.rawValue, forKey: Key.desktopButtons)
         defaults.set(Double(stageGap), forKey: Key.stageGap)
     }
 }
