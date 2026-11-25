@@ -218,7 +218,9 @@ enum StripPreview {
             customLayouts: customLayouts,
             otherDesktop: scenario == .otherDesktop ? [windows[1].id, windows[4].id] : [],
             allDesktops: scenario == .allDesktops ? [windows[1].id, windows[5].id] : [],
-            showDesktopList: scenario == .desktopList || scenario == .desktopButtons
+            showDesktopList: scenario == .desktopList || scenario == .desktopButtons,
+            // Dock のバッジ（メールは数、メモは点）。デスクトップの一覧の見本で見る
+            badges: scenario == .desktopList || scenario == .allDesktops ? ["com.apple.mail": "3", "com.apple.Notes": "•"] : [:]
         )
         body(Sample(stage: stage, windows: windows, groups: groups, screen: screen))
     }

@@ -38,6 +38,10 @@ final class StageController {
     private(set) var desktopNames: [UInt64: DesktopName] = [:]
     /// デスクトップの番号ごとの UUID（グループを出すデスクトップ。非公開の API が使えないときは空）
     private(set) var desktopUUIDs: [UInt64: String] = [:]
+    /// アプリ（bundle ID）ごとの、公開されたバッジまたは標準の Dock バッジ
+    private(set) var appBadges: [String: [AppIconBadge]] = [:]
+    /// 最後にバッジを読んだ時刻（読み直しのたびではなく、少し間を空けて読む）
+    @ObservationIgnored private var badgesReadAt: TimeInterval = 0
     /// ほかのデスクトップのウインドウを探す（非公開の API）
     @ObservationIgnored private let discovery = OtherSpaceDiscovery()
     /// ウインドウごとの、あるディスプレイ（ディスプレイの鍵。ディスプレイごとのストリップに、そのディスプレイのウインドウを並べるため）
@@ -178,6 +182,7 @@ final class StageController {
             windowFocusHistory.prune(keeping: existing)
         }
         classify(next)
+        readBadgesIfNeeded()
         var pruned = board
         pruned.prune(keeping: existing)
         if pruned != board { board = pruned }
@@ -582,6 +587,22 @@ final class StageController {
         AXWindow.raise(item.id, pid: item.pid)
     }
 
+    // MARK: - アプリのバッジ
+
+    /// 公開されたバッジと標準の Dock バッジを読む（2 秒に 1 回まで）。
+    private func readBadgesIfNeeded() {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - badgesReadAt >= 2 else { return }
+        badgesReadAt = now
+        let badges = AppIconBadge.merge(standard: DockBadges.read(), published: PublishedAppBadges.read())
+        if badges != appBadges { appBadges = badges }
+    }
+
+    /// そのウインドウのアプリのバッジ
+    func badges(for item: WindowItem) -> [AppIconBadge] {
+        item.bundleID.flatMap { appBadges[$0] } ?? []
+    }
+
     // MARK: - ウィンドウスイッチャーからの操作
 
     /// 選んだウインドウだけを、ステージに並べる（切り替え画面で、スペースで選んだもの。選んだ順に並べる）
@@ -732,8 +753,10 @@ final class StageController {
         customLayouts: [CustomLayout] = [],
         otherDesktop: [AXUIElement] = [],
         allDesktops: [AXUIElement] = [],
-        showDesktopList: Bool = false
+        showDesktopList: Bool = false,
+        badges: [String: String] = [:]
     ) {
+        appBadges = AppIconBadge.merge(standard: badges, published: [:])
         self.windows = windows
         self.isTrusted = isTrusted
         self.isSystemStageManagerOn = isSystemStageManagerOn

@@ -264,7 +264,7 @@ private struct WindowRow: View {
         if isOnAllDesktops { operations = "すべてのデスクトップに割り当てたウインドウです（どのデスクトップのウインドウバーにも並びます）\n" + operations }
         if item.isMinimized { operations = "しまってあるウインドウです\n" + operations }
         let name = item.title.isEmpty ? item.appName : "\(item.title)（\(item.appName)）"
-        return "\(name)\n\(operations)"
+        return ([name] + stage.badges(for: item).map(\.description) + [operations]).joined(separator: "\n")
     }
 
     @ViewBuilder
@@ -327,17 +327,10 @@ private struct WindowRow: View {
         }
     }
 
-    /// アプリのアイコン。必要なら右下にデスクトップの印を添える。
+    /// アプリのアイコン（公開されたバッジ、または右上に標準の Dock バッジを添える）
     private func appIcon(size: CGFloat, showsAllDesktops: Bool = false) -> some View {
-        Group {
-            if let icon = item.icon {
-                Image(nsImage: icon).resizable().frame(width: size, height: size)
-            }
-        }
-        .opacity(dimsMinimizedIcon ? 0.45 : 1)
-        .overlay(alignment: .bottomTrailing) {
-            if showsAllDesktops { DesktopBadge.allDesktopsIcon(iconSize: size) }
-        }
+        WindowAppIcon(image: item.icon, size: size, badges: stage.badges(for: item),
+                      isDimmed: dimsMinimizedIcon, showsAllDesktops: showsAllDesktops)
     }
 
     /// デスクトップの印（ほかのデスクトップのウインドウなら、その番号。すべてのデスクトップに割り当てたウインドウなら「すべて」）

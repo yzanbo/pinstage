@@ -184,6 +184,7 @@ struct DesktopPickerView: View {
             DesktopPickerEntry(
                 window: window, badge: section.badges[window.id],
                 isOnAllDesktops: model.stage.isOnAllDesktops(window),
+                appBadges: model.stage.badges(for: window),
                 isOnStage: model.isOnStage(window),
                 isMarked: model.isMarked(window),
                 appearance: model.appearance,
@@ -301,6 +302,8 @@ private struct DesktopPickerEntry: View {
     let badge: DesktopPickerBadge?
     /// すべてのデスクトップに割り当てたウインドウか（ウインドウバーと同じ印を付ける）
     let isOnAllDesktops: Bool
+    /// 公開されたアプリのバッジ、または Dock と同じ赤い数字・点
+    let appBadges: [AppIconBadge]
     /// ステージに出しているか
     let isOnStage: Bool
     /// スペースで選んでいるか（↩ でまとめてステージに並べる）
@@ -399,16 +402,10 @@ private struct DesktopPickerEntry: View {
         .overlay(alignment: .bottomTrailing) { markCheck.padding(6) }
     }
 
-    /// しまってあるウインドウは薄く。右下にすべてのデスクトップの印を添える。
+    /// アプリアイコンの隅にバッジを付ける。右下はすべてのデスクトップの印。しまってあるウインドウは薄く
     private func appIcon(size: CGFloat) -> some View {
-        (window.icon.map(Image.init(nsImage:)) ?? Image(systemName: "macwindow"))
-            .resizable()
-            .scaledToFit()
-            .frame(width: size, height: size)
-            .opacity(window.isMinimized ? 0.45 : 1)
-            .overlay(alignment: .bottomTrailing) {
-                if isOnAllDesktops, size >= 30 { DesktopBadge.allDesktopsIcon(iconSize: size) }
-            }
+        WindowAppIcon(image: window.icon, size: size, badges: size >= 16 ? appBadges : [],
+                      isDimmed: window.isMinimized, showsAllDesktops: isOnAllDesktops && size >= 30, showsFallback: true)
             .accessibilityHidden(true)
     }
 
@@ -446,6 +443,7 @@ private struct DesktopPickerEntry: View {
         if let desktop = isOnAllDesktops ? DesktopBadge.allDesktopsDescription : badge?.title { details.append(desktop) }
         if isOnStage { details.append("ステージに出ています") }
         if window.isMinimized { details.append("しまってあります") }
+        details.append(contentsOf: appBadges.map(\.description))
         return details
     }
 
