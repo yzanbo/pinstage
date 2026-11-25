@@ -33,7 +33,7 @@ Pinstage/
 │   ├── DisplayLocator        ウインドウの枠から、どのディスプレイのものかを決める（ディスプレイを 1 回読んで、いくつものウインドウに使う）
 │   ├── DockBadges            Dock のアイコンの標準のバッジを読む（Dock のアクセシビリティの情報 AXStatusLabel。アプリが絵に描いた印は読めない）
 │   ├── ThumbnailStore        ウインドウバー・切り替え画面で共有するサムネイル（ScreenCaptureKit。画面収録の許可）
-│   ├── DesktopPicker         ウィンドウスイッチャー（一覧の組み立て、パネルの出し入れ、キー操作）
+│   ├── DesktopPicker         ウインドウスイッチャー（一覧の組み立て、パネルの出し入れ、キー操作）
 │   ├── DesktopPickerView     一覧・アイコン・サムネイルの表示と、ボタンから出したときの矢印
 │   ├── DesktopPickerThumbnails  見えているカードだけ撮り、パネルを閉じたら仕事をやめる
 │   ├── StripAvoider          ウインドウの知らせ（AXObserver）を受け、常に出しているウインドウバーの後ろに入り込んだら戻す。開いた・閉じた・しまわれた・戻された・アプリを隠した・終了した知らせで、すぐ一覧を読み直させる（1.5 秒ごとの読み直しを待たない）
@@ -54,7 +54,7 @@ Pinstage/
 │   ├── StripView             ウインドウバーの中身の骨組み（上の帯・案内・ウインドウ・グループ。左右なら縦に、上下なら横に並べる）と、幅を変えるつまみ
 │   ├── StripNotices          案内（アクセシビリティの許可・ステージマネージャ）
 │   ├── StripWindowList       ウインドウの一覧と行（アイコン・名前・サムネイル・クリックの操作・開け閉めの動き）
-│   ├── StripDesktopList      ウィンドウスイッチャーを開くボタンと、表示を切り替えるメニュー
+│   ├── StripDesktopList      ウインドウスイッチャーを開くボタンと、表示を切り替えるメニュー
 │   ├── StripWindowDrag       バーの外をドラッグするときに出す見本と、行き先のバーの表示
 │   ├── StripRowCluster       同じアプリのウインドウのまとまり（となり合った行を、うすい枠でつなぐ。RowJoin・ClusterTray。アイコンの格子では、列の数から折り返しを決め、タイルの間まで枠を伸ばす）
 │   ├── StripGroupList        グループの一覧と行（見本・アイコンだけのときの形・右クリックのメニュー）
@@ -78,8 +78,9 @@ Pinstage/
 │   └── LayoutEditorWindowController  型の編集画面を開く役（新しい型・ステージのウインドウの並びから・登録した型を直す）
 └── Settings/       設定画面（Pinshelf と同じ、ツールバーのタブ）
     ├── SettingsWindowController  設定のウインドウ（一般・ウインドウバー・型・ショートカット・自動化）
-    ├── GeneralSettingsView       起動・ウインドウを出すとき（1 枚だけ出すときの大きさ）・macOS の設定（許可とステージマネージャの状態）・バージョン
-    ├── StripSettingsView         ウインドウバーの置き方（出し方・位置・ディスプレイ・Dock との重なりの案内）・見た目（形式・大きさ）・並べるウインドウ
+    ├── GeneralSettingsView       起動・ステージ（1 枚だけ出すときの大きさ）・macOS の設定（許可とステージマネージャの状態）・バージョン
+    ├── StripSettingsView         ウインドウバーの置き方（位置・ディスプレイ・出し方と、常に出すときの 2 項目・Dock との重なりの案内）・見た目（形式・大きさ）・並べるウインドウ・デスクトップボタン
+    ├── SwitcherSettingsView      ウインドウスイッチャーの開き方（ショートカット・確定のしかた）・表示（グループ分け・見た目・大きさ）・開いているときに使えるキー
     ├── LayoutsSettingsView       登録した型の一覧（編集・名前の変更・複製・削除）と小さな見本
     ├── ShortcutSettingsView      ショートカットの記録（Pinshot と同じ作り）
     ├── AutomationSettingsView    「ショートカット」アプリでの使い方と、操作の URL（コピーできる）
