@@ -82,6 +82,8 @@ struct GroupSection: View {
                 // 見出しの右の ＋ で、グループを作る（ステージを保存・見えている画面を記録）
                 HStack(spacing: 0) {
                     SectionHeader(title: "グループ", count: visible.count)
+                        .contentShape(Rectangle())
+                        .desktopListContextMenu(stage: stage)
                     GroupAddButton(stage: stage, screen: strip.screen)
                 }
             } else {

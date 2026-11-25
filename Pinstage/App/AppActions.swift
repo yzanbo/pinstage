@@ -1,3 +1,4 @@
+import CoreGraphics
 import PinstageCore
 
 /// 押されたときにすること（設定画面・型の編集画面を開くなど。ストリップの中身から呼ぶ）
@@ -7,6 +8,10 @@ final class AppActions {
     var createLayout: ([UnitRect]) -> Void = { _ in }
     /// 検索の欄を出す
     var openSearch: () -> Void = {}
+    /// ウインドウバーのボタンの枠に、デスクトップの一覧を出す（枠は画面座標）。
+    var openDesktopList: (UInt64, CGRect, StripController) -> Void = { _, _, _ in }
+    /// ストリップを指定すれば、そのストリップから開いた一覧だけを閉じる。
+    var closeDesktopList: (StripController?) -> Void = { _ in }
     /// グループの編集画面を開く
     var editGroup: (StageGroup) -> Void = { _ in }
 }

@@ -101,45 +101,10 @@ final class SearchModel {
     }
 }
 
-/// 検索の欄のウインドウ
-///
-/// 前面のアプリからフォーカスを奪わず（nonactivatingPanel）、文字は打てるようにキーウインドウにはなる。
-/// ↑↓・↩・esc は、文字の欄に渡る前に受け取る。
-final class SearchPanel: NSPanel {
-    var keyHandler: ((NSEvent) -> Bool)?
-
-    init() {
-        super.init(
-            contentRect: .zero,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        isFloatingPanel = true
-        level = .modalPanel
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        hidesOnDeactivate = false
-        isOpaque = false
-        backgroundColor = .clear
-        hasShadow = true
-        isReleasedWhenClosed = false
-    }
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    override func sendEvent(_ event: NSEvent) {
-        // 日本語入力で変換している途中（下線が出ている間）は、↩ で確定・↑↓ で候補を選ぶので、日本語入力に任せる
-        let isComposing = (firstResponder as? NSTextView)?.hasMarkedText() ?? false
-        if event.type == .keyDown, !isComposing, keyHandler?(event) == true { return }
-        super.sendEvent(event)
-    }
-}
-
 /// 検索の欄を出す・閉じる（ショートカット・ストリップの🔍・メニューバーから）
 final class SearchController: NSObject, NSWindowDelegate {
     private let stage: StageController
-    private var panel: SearchPanel?
+    private var panel: KeyboardPanel?
 
     /// 検索の欄の大きさ
     static let size = CGSize(width: 600, height: 420)
@@ -164,7 +129,7 @@ final class SearchController: NSObject, NSWindowDelegate {
         let model = SearchModel(stage: stage, screen: screen)
         model.onClose = { [weak self] in self?.close() }
 
-        let panel = SearchPanel()
+        let panel = KeyboardPanel()
         panel.keyHandler = { event in model.handleKey(event) }
         panel.contentView = NSHostingView(rootView: SearchView(model: model))
         panel.delegate = self

@@ -80,6 +80,8 @@ struct WindowSection: View {
         VStack(alignment: .leading, spacing: 6) {
             if !isIconOnly {
                 SectionHeader(title: "ウインドウ", count: rows.count)
+                    .contentShape(Rectangle())
+                    .desktopListContextMenu(stage: stage)
             }
             // どの形式も、大きさで決まった高さ（ウインドウが少なくても縦いっぱいには広げない。多ければスクロール）
             let kind = strip.rowKind

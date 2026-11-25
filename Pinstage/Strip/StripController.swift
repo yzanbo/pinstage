@@ -26,11 +26,14 @@ final class StripController {
     let spaceID: UInt64?
     private let panel = StripPanel()
     private let stage: StageController
+    private let actions: AppActions
     private var pointerTimer: Timer?
     /// 出しているか
     private(set) var isShown = false
     /// ストリップから行をドラッグしている途中か（その間は隠さない）
     var isDragging = false
+    /// デスクトップ一覧へポインタを動かしている間は、自動で隠さない。
+    var desktopListIsOpen = false
     /// 隠していたストリップを出した（サムネイルをすぐ撮り直すため）
     var onShow: (() -> Void)?
     /// このストリップが置かれたデスクトップのウインドウの一覧
@@ -138,6 +141,7 @@ final class StripController {
         self.spaceID = spaceID
         displayKey = StageController.displayKey(screen)
         self.stage = stage
+        self.actions = actions
         let view = StripView(stage: stage, thumbnails: thumbnails, shortcuts: shortcuts, strip: self, actions: actions)
         let hosting = StripHostingView(rootView: view)
         // ストリップの大きさはこちらで決める（SwiftUI の中身のいちばん小さい大きさを、ウインドウに押し付けさせない）
@@ -148,6 +152,12 @@ final class StripController {
     /// ストリップの枠（画面の座標）。ドラッグがストリップの外で終わったかを調べるのに使う
     var frame: CGRect {
         panel.frame
+    }
+
+    /// SwiftUI で測ったボタンの枠（左上が原点）を、AppKit の画面座標へ移す。
+    func screenRect(for rect: CGRect) -> CGRect {
+        panel.convertToScreen(CGRect(x: rect.minX, y: panel.frame.height - rect.maxY,
+                                     width: rect.width, height: rect.height))
     }
 
     /// いまのポインタの位置（ストリップの中身の座標。左上が原点。GroupDropTargets.space と同じ）
@@ -175,9 +185,14 @@ final class StripController {
 
     /// 閉じる（ディスプレイを外したとき・設定を変えたとき）
     func close() {
+        closeDesktopList()
         pointerTimer?.invalidate()
         panel.orderOut(nil)
         panel.contentView = nil
+    }
+
+    func closeDesktopList() {
+        if desktopListIsOpen { actions.closeDesktopList(self) }
     }
 
     /// 設定に合わせて、出す・隠す。
@@ -222,7 +237,7 @@ final class StripController {
 
     /// 自動で隠すとき、ポインタの位置で出す・隠す
     private func trackPointer() {
-        guard stage.stripSettings.mode == .autoHide, !isDragging else { return }
+        guard stage.stripSettings.mode == .autoHide, !isDragging, !desktopListIsOpen else { return }
         let pointer = NSEvent.mouseLocation
         if !isShown {
             // ポインタの位置を先に比べる（表に出ているデスクトップかを調べるのは、端に寄せたときだけで済む）
@@ -266,6 +281,7 @@ final class StripController {
     }
 
     private func placePanel(shown: Bool, animated: Bool) {
+        if !shown { closeDesktopList() }
         let wasShown = isShown
         isShown = shown
         if shown, !wasShown { onShow?() }

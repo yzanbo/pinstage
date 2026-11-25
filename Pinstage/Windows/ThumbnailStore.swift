@@ -3,10 +3,10 @@ import Observation
 import PinstageCore
 import ScreenCaptureKit
 
-/// ストリップに出すウインドウのライブのサムネイル
+/// ストリップとウインドウ切り替え画面に出すサムネイル
 ///
 /// ScreenCaptureKit でウインドウだけを撮る（ほかのウインドウに隠れていても、そのウインドウの中身が撮れる）。
-/// 画面収録の許可が要る。ストリップに並べているウインドウだけを、少しずつ撮り直す。
+/// 画面収録の許可が要る。ストリップは少しずつ撮り直し、切り替え画面では見えているカードの足りない画像だけを撮る。
 @Observable
 final class ThumbnailStore {
     /// ウインドウごとのサムネイル
@@ -67,19 +67,29 @@ final class ThumbnailStore {
         guard hasPermission, !items.isEmpty, !isCapturing else { return }
         isCapturing = true
         Task {
-            await capture(items)
+            _ = await capture(items)
             isCapturing = false
         }
     }
 
-    private func capture(_ items: [WindowItem]) async {
+    /// 切り替え画面が開いている間に、見えているカードだけ撮る。試したウインドウを返す。
+    func captureForSwitcher(_ items: [WindowItem], isVisible: (AXUIElement) -> Bool) async -> Set<AXUIElement> {
+        guard hasPermission else { return Set(items.map(\.id)) }
+        return await capture(items) { id in isVisible(id) && self.images[id] == nil }
+    }
+
+    private func capture(
+        _ items: [WindowItem], shouldCapture: (AXUIElement) -> Bool = { _ in true }
+    ) async -> Set<AXUIElement> {
         let content: SCShareableContent
         do {
             content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
         } catch {
+            guard !Task.isCancelled else { return [] }
             DesktopTrace.log("サムネイルの失敗", "ウインドウの一覧を読めない: \(error.localizedDescription)")
-            return
+            return Set(items.map(\.id).filter(shouldCapture))
         }
+        guard !Task.isCancelled else { return [] }
         let windows = content.windows.filter { $0.windowLayer == 0 && $0.owningApplication != nil }
         let candidates = windows.map {
             CaptureWindowMatcher.Window(pid: $0.owningApplication?.processID ?? 0, title: $0.title ?? "", frame: $0.frame)
@@ -97,16 +107,23 @@ final class ThumbnailStore {
         // 閉じたウインドウのサムネイルは捨てる。いま撮らないウインドウ（ほかのデスクトップのものなど）は、前に撮ったものを残す
         prune(keeping: existing().union(items.map(\.id)))
         var captured = 0
+        var attempted: Set<AXUIElement> = []
         for (item, match) in zip(items, matches) {
+            guard !Task.isCancelled else { return attempted }
+            guard shouldCapture(item.id) else { continue }
+            attempted.insert(item.id)
             // しまってあるウインドウは撮れないので、前に撮ったものを残す
             guard let match, !item.isMinimized else { continue }
-            if let image = await captureImage(of: windows[match]) {
+            let image = await captureImage(of: windows[match])
+            guard !Task.isCancelled else { return attempted }
+            if let image {
                 images[item.id] = image
                 captured += 1
             }
         }
         // 撮れないときに、許可・照らし合わせ・撮影のどこで止まったかを確かめるための記録
         DesktopTrace.log("サムネイルの結果", "照らし合わせた=\(matches.compactMap { $0 }.count) 撮れた=\(captured)")
+        return attempted
     }
 
     private func captureImage(of window: SCWindow) async -> NSImage? {

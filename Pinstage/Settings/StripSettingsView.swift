@@ -80,10 +80,48 @@ struct StripSettingsView: View {
             }
 
             Section("並べるウインドウ") {
+                Toggle(isOn: binding(\.showsDesktopList)) {
+                    SettingTitle(
+                        "デスクトップ一覧を表示",
+                        info: "ウインドウバーにデスクトップごとのボタンを並べます。ボタンを押すと、そのデスクトップのウインドウ一覧が開きます。オフでも、ショートカットから全デスクトップの一覧を開けます。"
+                    )
+                }
                 Toggle(isOn: binding(\.groupsSameApp)) {
                     SettingTitle(
                         "同じアプリのウインドウをまとめる",
                         info: "オンのときは、同じアプリのウインドウを、いつもとなりに並べて 1 つの枠でつなぎます。ドラッグすると、同じアプリのウインドウがまとまったまま動きます（ステージやグループの上で離すと、まとまりのウインドウをすべて足します）。オフのときは、新しく開いたウインドウを同じアプリのウインドウのすぐ後ろに入れるだけで、ドラッグで 1 つずつ離して置けます。"
+                    )
+                }
+            }
+
+            Section("ウインドウ切り替え画面") {
+                OptionPicker(
+                    "グループ分け",
+                    info: "ショートカット（初期設定は ⌥Tab）で開く画面だけに適用します。「まとめて表示」では最近使った順に並び、ほかのデスクトップにあるウインドウには番号を付けます。",
+                    selection: Binding(
+                        get: { stage.windowSwitcherSettings.grouping },
+                        set: { stage.windowSwitcherSettings.grouping = $0 }
+                    )
+                )
+                OptionPicker(
+                    "見た目",
+                    info: "「一覧」はアイコンと名前、「アイコンだけ」は選んでいるウインドウの名前を画面の下に出します。「サムネイル」は画面収録の許可が必要で、撮れないウインドウはアイコンと名前で表示します。",
+                    selection: Binding(
+                        get: { stage.windowSwitcherSettings.appearance },
+                        set: {
+                            let old = stage.windowSwitcherSettings.appearance
+                            stage.windowSwitcherSettings.appearance = $0
+                            if $0 == .thumbnails, old != .thumbnails, !thumbnails.hasPermission {
+                                thumbnails.requestPermission()
+                            }
+                        }
+                    )
+                )
+                if stage.windowSwitcherSettings.appearance == .thumbnails, !thumbnails.hasPermission {
+                    NoticeRow(
+                        text: "画面収録の許可がない間は、ウインドウ切り替え画面を一覧で表示します。",
+                        button: "画面収録を開く",
+                        action: ThumbnailStore.openSettings
                     )
                 }
             }

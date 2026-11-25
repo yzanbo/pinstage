@@ -28,6 +28,8 @@ enum StripPreview {
         case sameApp
         /// すべてのデスクトップに割り当てたウインドウがある
         case allDesktops
+        /// デスクトップ別のウインドウ一覧を開くボタンを出す
+        case desktopList
     }
 
     /// ストリップのほかに描ける画面
@@ -38,6 +40,10 @@ enum StripPreview {
         case layoutEditor
         /// 検索の欄
         case search
+        case desktopPicker
+        case desktopOverview
+        case desktopOverviewIcons
+        case desktopOverviewThumbnails
         /// 設定の「型」のタブ
         case layouts
         /// 設定の「一般」「ストリップ」「ショートカット」「自動化」のタブ
@@ -113,7 +119,8 @@ enum StripPreview {
             CustomLayout(name: "左右", slots: [UnitRect(x: 0, y: 0, width: 0.4, height: 1), UnitRect(x: 0.4, y: 0, width: 0.6, height: 1)]),
             CustomLayout(name: "重ねた形", slots: [UnitRect(x: 0, y: 0, width: 0.6, height: 0.7), UnitRect(x: 0.3, y: 0.25, width: 0.7, height: 0.75), UnitRect(x: 0.1, y: 0.5, width: 0.4, height: 0.4)]),
         ]
-        withSample(scenario: .normal, customLayouts: layouts) { sample in
+        let isDesktopPicker = [Screen.desktopPicker, .desktopOverview, .desktopOverviewIcons, .desktopOverviewThumbnails].contains(screen)
+        withSample(scenario: isDesktopPicker ? .desktopList : .normal, customLayouts: layouts) { sample in
             let stage = sample.stage
             switch screen {
             case .groupEditor:
@@ -122,6 +129,18 @@ enum StripPreview {
                 write(LayoutEditorView(layout: layouts[1], aspectRatio: 1.6, onSave: { _ in }, onCancel: {}), size: nil, to: url)
             case .search:
                 write(SearchView(model: SearchModel(stage: stage, screen: sample.screen)), size: SearchController.size, to: url)
+            case .desktopPicker, .desktopOverview, .desktopOverviewIcons, .desktopOverviewThumbnails:
+                let anchored = screen == .desktopPicker
+                let appearance: WindowSwitcherSettings.Appearance = switch screen {
+                case .desktopOverviewIcons: .icons
+                case .desktopOverviewThumbnails: .thumbnails
+                default: .list
+                }
+                if screen == .desktopOverviewIcons { stage.windowSwitcherSettings.grouping = .flat }
+                let size = anchored ? CGSize(width: 320, height: 169) : WindowSwitcherLayout.overviewSize(for: appearance)
+                write(DesktopPickerController.preview(stage: stage, screen: sample.screen, desktop: anchored ? 2 : nil,
+                                                      size: size, appearance: appearance),
+                      size: size, to: url)
             case .layouts:
                 let view = LayoutsSettingsView(stage: stage, editor: LayoutEditorWindowController(stage: stage))
                     .frame(width: 560, height: 360)
@@ -191,7 +210,8 @@ enum StripPreview {
                 : nil,
             customLayouts: customLayouts,
             otherDesktop: scenario == .otherDesktop ? [windows[1].id, windows[4].id] : [],
-            allDesktops: scenario == .allDesktops ? [windows[1].id, windows[5].id] : []
+            allDesktops: scenario == .allDesktops ? [windows[1].id, windows[5].id] : [],
+            showDesktopList: scenario == .desktopList
         )
         body(Sample(stage: stage, windows: windows, groups: groups, screen: screen))
     }

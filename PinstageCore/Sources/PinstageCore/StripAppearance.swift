@@ -84,6 +84,8 @@ public struct StripSettings: Equatable, Sendable {
     }
     /// 同じアプリのウインドウを、いつもまとめて並べるか（オフなら、新しく開いたものを同じアプリの後ろに入れるだけで、ドラッグで離せる）
     public var groupsSameApp: Bool
+    /// 仮想デスクトップごとのウインドウ一覧を開くボタンを出すか
+    public var showsDesktopList: Bool
     /// 左右に出したときのストリップの幅（pt。ステージの側の縁をドラッグして変える）。一覧・サムネイルの幅
     public var stripWidth: CGFloat {
         didSet { stripWidth = StripGeometry.clampedWidth(stripWidth) }
@@ -110,9 +112,11 @@ public struct StripSettings: Equatable, Sendable {
         iconSize: StripIconSize = .small,
         gridWidth: CGFloat = StripGeometry.defaultWidth,
         groupsSameApp: Bool = true,
-        stageGap: CGFloat = StripGeometry.stageGap
+        stageGap: CGFloat = StripGeometry.stageGap,
+        showsDesktopList: Bool = true
     ) {
         self.groupsSameApp = groupsSameApp
+        self.showsDesktopList = showsDesktopList
         self.stageGap = Self.clampedGap(stageGap)
         self.mode = mode
         self.edge = edge
@@ -185,6 +189,7 @@ public struct StripSettings: Equatable, Sendable {
         static let gridWidth = "strip.gridWidth"
         static let keepsWindowsOffStrip = "strip.keepsWindowsOffStrip"
         static let groupsSameApp = "strip.groupsSameApp"
+        static let showsDesktopList = "strip.showsDesktopList"
         static let stageGap = "strip.stageGap"
     }
 
@@ -202,7 +207,8 @@ public struct StripSettings: Equatable, Sendable {
                 .flatMap(StripIconSize.init(rawValue:)) ?? fallback.iconSize,
             gridWidth: (defaults.object(forKey: Key.gridWidth) as? Double).map { CGFloat($0) } ?? fallback.gridWidth,
             groupsSameApp: defaults.object(forKey: Key.groupsSameApp) as? Bool ?? fallback.groupsSameApp,
-            stageGap: (defaults.object(forKey: Key.stageGap) as? Double).map { CGFloat($0) } ?? fallback.stageGap
+            stageGap: (defaults.object(forKey: Key.stageGap) as? Double).map { CGFloat($0) } ?? fallback.stageGap,
+            showsDesktopList: defaults.object(forKey: Key.showsDesktopList) as? Bool ?? fallback.showsDesktopList
         )
     }
 
@@ -216,6 +222,7 @@ public struct StripSettings: Equatable, Sendable {
         defaults.set(Double(gridWidth), forKey: Key.gridWidth)
         defaults.set(keepsWindowsOffStrip, forKey: Key.keepsWindowsOffStrip)
         defaults.set(groupsSameApp, forKey: Key.groupsSameApp)
+        defaults.set(showsDesktopList, forKey: Key.showsDesktopList)
         defaults.set(Double(stageGap), forKey: Key.stageGap)
     }
 }

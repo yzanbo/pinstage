@@ -28,6 +28,8 @@ final class StageController {
     /// ウインドウごとの、あるデスクトップ（非公開の API で読む。読めないときは nil）。
     /// デスクトップごとのストリップが、自分のデスクトップのウインドウを決めるのに使う
     private(set) var windowSpaces: [AXUIElement: Set<UInt64>]?
+    /// デスクトップ別のウインドウ一覧に使う、ディスプレイごとのデスクトップ
+    private(set) var desktopDisplays: [SkyLight.Display]?
     /// 隠されたウインドウ（× で閉じてもウインドウを捨てずに隠すだけのアプリのもの）。ウインドウバーには並べない（並び順の記録には残す）
     private(set) var hiddenWindowIDs: Set<AXUIElement> = []
     /// 最後にデスクトップを切り替えた時刻（切り替えた直後は、行き先のウインドウがまだ画面に出ていないことがあるので、隠されたかを見分けない）
@@ -65,6 +67,12 @@ final class StageController {
             onStripSettingsChanged?(oldValue)
         }
     }
+    /// ショートカットの切り替え画面の設定
+    var windowSwitcherSettings: WindowSwitcherSettings {
+        didSet {
+            if windowSwitcherSettings != oldValue { windowSwitcherSettings.save(to: defaults) }
+        }
+    }
     /// ウインドウを 1 枚だけ出すときの大きさ
     var singleWindowSize: SingleWindowSize {
         didSet { singleWindowSize.save(to: defaults) }
@@ -100,6 +108,7 @@ final class StageController {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         stripSettings = StripSettings(defaults: defaults)
+        windowSwitcherSettings = WindowSwitcherSettings(defaults: defaults)
         singleWindowSize = SingleWindowSize(defaults: defaults)
     }
 
@@ -215,6 +224,7 @@ final class StageController {
         if result.desktopNames != desktopNames { desktopNames = result.desktopNames }
         if result.desktopUUIDs != desktopUUIDs { desktopUUIDs = result.desktopUUIDs }
         if result.windowSpaces != windowSpaces { windowSpaces = result.windowSpaces }
+        if result.desktopDisplays != desktopDisplays { desktopDisplays = result.desktopDisplays }
         desktopSnapshot = result.activeSpace.snapshot
         if result.activeSpace.ids != currentSpaceIDs { currentSpaceIDs = result.activeSpace.ids }
         if result.activeSpace.floating != floatingIDs { floatingIDs = result.activeSpace.floating }
@@ -704,7 +714,8 @@ final class StageController {
         layout: LayoutChoice? = nil,
         customLayouts: [CustomLayout] = [],
         otherDesktop: [AXUIElement] = [],
-        allDesktops: [AXUIElement] = []
+        allDesktops: [AXUIElement] = [],
+        showDesktopList: Bool = false
     ) {
         self.windows = windows
         self.isTrusted = isTrusted
@@ -717,6 +728,13 @@ final class StageController {
             let all = allDesktops.map { ($0, Set<UInt64>([1, 2, 3])) }
             windowSpaces = Dictionary(other + all, uniquingKeysWith: { first, _ in first })
             desktopNames = [1: DesktopName(number: 1), 2: DesktopName(number: 2), 3: DesktopName(number: 3)]
+        }
+        if showDesktopList {
+            let ids: [UInt64] = [1, 2, 3]
+            desktopDisplays = [SkyLight.Display(identifier: Self.displayKey(screen),
+                                                spaces: ids.map { .init(id: $0, isFullScreen: false) }, current: 1)]
+            desktopNames = Dictionary(uniqueKeysWithValues: ids.map { ($0, DesktopName(number: Int($0))) })
+            windowSpaces = Dictionary(uniqueKeysWithValues: windows.enumerated().map { ($1.id, [$0 < 3 ? 1 : 2]) })
         }
         updateStage(on: screen, apply: false) { stage in
             stage.selection.replace(with: onStage)

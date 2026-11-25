@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var editor = LayoutEditorWindowController(stage: stage)
     private lazy var groupEditor = GroupEditorWindowController(stage: stage)
     private lazy var search = SearchController(stage: stage)
+    private lazy var desktopPicker = DesktopPickerController(stage: stage, thumbnails: thumbnails)
     private lazy var stripAvoider = StripAvoider(stage: stage, shownStripScreens: { [weak self] in self?.strips.shownScreens ?? [] })
     private lazy var settingsWindow = SettingsWindowController(stage: stage, thumbnails: thumbnails, shortcuts: shortcuts, editor: editor)
     private lazy var automation = AutomationCenter(stage: stage, strips: strips, search: search)
@@ -68,6 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         actions.openSettings = { [weak self] tab in self?.settingsWindow.show(tab: tab) }
         actions.createLayout = { [weak self] slots in self?.editor.createNew(from: slots) }
         actions.openSearch = { [weak self] in self?.search.show() }
+        actions.openDesktopList = { [weak self] id, anchor, strip in
+            self?.desktopPicker.show(desktop: id, anchor: anchor, strip: strip)
+        }
+        actions.closeDesktopList = { [weak self] strip in self?.desktopPicker.close(anchoredTo: strip) }
         actions.editGroup = { [weak self] group in self?.groupEditor.edit(group) }
         // 自動化（URL・「ショートカット」アプリ）から操作できるようにする
         AutomationCenter.shared = automation
@@ -101,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         thumbnails.stop()
         stripAvoider.stop()
+        desktopPicker.close()
         strips.stop()
         stage.stop()
     }
@@ -110,6 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch action {
         case .search:
             search.toggle()
+        case .desktopList:
+            desktopPicker.toggleOverview()
         case .toggleStrip:
             strips.toggle()
         case .saveStageAsGroup:

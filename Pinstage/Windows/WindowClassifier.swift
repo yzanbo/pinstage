@@ -15,6 +15,8 @@ struct WindowClassification {
 
     /// ウインドウごとの、あるデスクトップ（非公開の API が使えないときは nil）
     var windowSpaces: [AXUIElement: Set<UInt64>]?
+    /// ディスプレイごとのデスクトップの一覧と、そのうちの現在のデスクトップ
+    var desktopDisplays: [SkyLight.Display]?
     /// デスクトップの名前
     var desktopNames: [UInt64: DesktopName]
     /// デスクトップの UUID（グループを出すデスクトップを覚えるのに使う。番号は再起動で変わることがあるので UUID で覚える）
@@ -57,6 +59,7 @@ enum WindowClassifier {
         }
         return WindowClassification(
             windowSpaces: spaces,
+            desktopDisplays: displayList,
             desktopNames: desktopNames(displayList ?? []),
             desktopUUIDs: desktopUUIDs(displayList ?? []),
             activeSpace: WindowClassification.ActiveSpace(

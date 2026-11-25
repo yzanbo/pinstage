@@ -61,6 +61,7 @@ struct ShortcutTests {
         #expect(bindings.shortcut(for: .group1)?.displayString == "⌃⌥1")
         #expect(bindings.shortcut(for: .group9)?.displayString == "⌃⌥9")
         #expect(bindings.shortcut(for: .toggleStrip)?.displayString == "⌃⌥S")
+        #expect(bindings.shortcut(for: .desktopList)?.displayString == "⌥⇥")
         #expect(bindings.shortcut(for: .saveStageAsGroup) == nil)
     }
 
@@ -296,12 +297,26 @@ struct AddedShortcutTests {
         let loaded = ShortcutBindings(defaults: defaults)
         #expect(loaded.shortcut(for: .group1) == nil)
         #expect(loaded.shortcut(for: .nextGroup)?.displayString == "⌃⌥]")
+        #expect(loaded.shortcut(for: .desktopList)?.displayString == "⌥⇥")
         #expect(loaded.shortcut(for: .nextWindow) == nil)
         // 保存し直したあとは、外したものを外したまま読む
         var edited = loaded
         edited.set(nil, for: .nextGroup)
         edited.save(to: defaults)
         #expect(ShortcutBindings(defaults: defaults).shortcut(for: .nextGroup) == nil)
+    }
+
+    @Test("既存の操作が ⌥Tab を使っていたら、新しい操作に割り当てない")
+    func preservesExistingOptionTab() throws {
+        let suite = "PinstageTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let tab = try #require(ShortcutAction.desktopList.defaultShortcut)
+        defaults.set(try JSONEncoder().encode(["search": tab]), forKey: "shortcuts.bindings")
+        defaults.set(["search"], forKey: "shortcuts.knownActions")
+        let loaded = ShortcutBindings(defaults: defaults)
+        #expect(loaded.shortcut(for: .search) == tab)
+        #expect(loaded.shortcut(for: .desktopList) == nil)
     }
 }
 

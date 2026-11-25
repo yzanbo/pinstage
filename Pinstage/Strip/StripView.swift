@@ -23,8 +23,12 @@ struct StripView: View {
         }
         // グループへの出し入れで、ポインタとグループの行の位置を比べる座標
         .coordinateSpace(.named(GroupDropTargets.space))
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.separator))
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.regularMaterial)
+                .desktopListContextMenu(stage: stage)
+        }
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.separator).allowsHitTesting(false))
         // 幅を変えるつまみは、ステージの側の縁に出す（右のストリップなら左の縁）
         .overlay(alignment: strip.edge == .right ? .leading : .trailing) {
             // 上下のストリップの高さは、形式で決まるので、つまみは出さない
@@ -38,6 +42,8 @@ struct StripView: View {
     private var column: some View {
         VStack(alignment: .leading, spacing: StripStyle.sectionSpacing) {
             StripToolbar(stage: stage, shortcuts: shortcuts, actions: actions, screen: strip.screen, compact: isIconOnly)
+                .desktopListContextMenu(stage: stage)
+            StripDesktopList(stage: stage, strip: strip, actions: actions)
             if !stage.isTrusted {
                 StripNotice.permission(compact: isIconOnly)
             }
@@ -56,6 +62,8 @@ struct StripView: View {
     private var bar: some View {
         HStack(spacing: 8) {
             StripToolbar(stage: stage, shortcuts: shortcuts, actions: actions, screen: strip.screen, compact: false, horizontal: true)
+                .desktopListContextMenu(stage: stage)
+            StripDesktopList(stage: stage, strip: strip, actions: actions)
             if !stage.isTrusted {
                 StripNotice.permission(compact: true).fixedSize()
             }

@@ -53,6 +53,7 @@ public enum ShortcutModifier: CaseIterable, Sendable {
 /// ショートカットを割り当てられる操作
 public enum ShortcutAction: String, CaseIterable, Codable, Sendable, Identifiable {
     case search
+    case desktopList
     case toggleStrip
     case saveStageAsGroup
     case recordScreenAsGroup
@@ -70,7 +71,7 @@ public enum ShortcutAction: String, CaseIterable, Codable, Sendable, Identifiabl
     }
 
     public static let groupActions: [ShortcutAction] = [.group1, .group2, .group3, .group4, .group5, .group6, .group7, .group8, .group9]
-    public static let stageActions: [ShortcutAction] = [.search, .toggleStrip, .saveStageAsGroup, .recordScreenAsGroup]
+    public static let stageActions: [ShortcutAction] = [.search, .desktopList, .toggleStrip, .saveStageAsGroup, .recordScreenAsGroup]
     /// 順に切り替える操作
     public static let cycleActions: [ShortcutAction] = [.nextGroup, .previousGroup, .nextWindow, .previousWindow]
 
@@ -81,6 +82,7 @@ public enum ShortcutAction: String, CaseIterable, Codable, Sendable, Identifiabl
     public var title: String {
         switch self {
         case .search: "ウインドウ・グループを検索"
+        case .desktopList: "デスクトップ別のウインドウ一覧を開く"
         case .toggleStrip: "ウインドウバーを出す・隠す"
         case .saveStageAsGroup: "ステージをグループとして保存"
         case .recordScreenAsGroup: "見えている画面をグループとして記録"
@@ -96,10 +98,11 @@ public enum ShortcutAction: String, CaseIterable, Codable, Sendable, Identifiabl
     private static let digitKeyCodes: [UInt32] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
     private static let keyCodeS: UInt32 = 1
     private static let keyCodeSpace: UInt32 = 49
+    private static let keyCodeTab: UInt32 = 48
     private static let keyCodeRightBracket: UInt32 = 30
     private static let keyCodeLeftBracket: UInt32 = 33
 
-    /// 初期設定（検索は ⌃⌥Space、グループは ⌃⌥1〜9、ストリップは ⌃⌥S、次・前のグループは ⌃⌥] ・⌃⌥[）
+    /// 初期設定（検索は ⌃⌥Space、デスクトップ別の一覧は ⌥Tab、グループは ⌃⌥1〜9、ストリップは ⌃⌥S、次・前のグループは ⌃⌥] ・⌃⌥[）
     public var defaultShortcut: Shortcut? {
         let controlOption = ShortcutModifier.control.carbonValue | ShortcutModifier.option.carbonValue
         if let index = groupIndex {
@@ -107,6 +110,7 @@ public enum ShortcutAction: String, CaseIterable, Codable, Sendable, Identifiabl
         }
         switch self {
         case .search: return Shortcut(keyCode: Self.keyCodeSpace, modifiers: controlOption, key: "Space")
+        case .desktopList: return Shortcut(keyCode: Self.keyCodeTab, modifiers: ShortcutModifier.option.carbonValue, key: "⇥")
         case .toggleStrip: return Shortcut(keyCode: Self.keyCodeS, modifiers: controlOption, key: "S")
         case .nextGroup: return Shortcut(keyCode: Self.keyCodeRightBracket, modifiers: controlOption, key: "]")
         case .previousGroup: return Shortcut(keyCode: Self.keyCodeLeftBracket, modifiers: controlOption, key: "[")
