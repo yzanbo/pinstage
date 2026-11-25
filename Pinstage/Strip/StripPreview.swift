@@ -28,7 +28,7 @@ enum StripPreview {
         case sameApp
         /// すべてのデスクトップに割り当てたウインドウがある
         case allDesktops
-        /// ウィンドウスイッチャーを開くボタンを出す
+        /// ウインドウスイッチャーを開くボタンを出す
         case desktopList
         /// まとめボタンと各デスクトップのボタンを一緒に出す
         case desktopButtons

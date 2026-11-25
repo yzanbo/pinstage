@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import PinstageCore
 
-@Suite("ウィンドウスイッチャー")
+@Suite("ウインドウスイッチャー")
 struct WindowSwitcherTests {
     @Test("初期値はデスクトップ別・アイコンだけ・中。グループ分け・見た目・大きさを別々に保存する")
     func settings() throws {

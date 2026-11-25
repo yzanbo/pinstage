@@ -1,9 +1,9 @@
 import CoreGraphics
 import Foundation
 
-/// ウィンドウスイッチャーの表示と操作の設定（ウインドウバーとは別）。
+/// ウインドウスイッチャーの表示と操作の設定（ウインドウバーとは別）。
 public struct WindowSwitcherSettings: Equatable, Sendable {
-    public static let title = "ウィンドウスイッチャー"
+    public static let title = "ウインドウスイッチャー"
 
     public enum Grouping: String, CaseIterable, Sendable {
         case byDesktop

@@ -1,6 +1,6 @@
 import Foundation
 
-/// ウインドウバーとウィンドウスイッチャーで共有するアプリアイコンの印。
+/// ウインドウバーとウインドウスイッチャーで共有するアプリアイコンの印。
 public struct AppIconBadge: Equatable, Identifiable, Sendable {
     public enum Corner: String, CaseIterable, Decodable, Sendable {
         case topLeft, topRight, bottomLeft

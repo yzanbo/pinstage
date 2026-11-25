@@ -2,7 +2,7 @@ import AppKit
 import PinstageCore
 import SwiftUI
 
-/// ウインドウバーとウィンドウスイッチャーで共通のアプリアイコン。
+/// ウインドウバーとウインドウスイッチャーで共通のアプリアイコン。
 /// アイコンの薄さは画像だけに適用し、通知とデスクトップの印は読みやすく保つ。
 struct WindowAppIcon: View {
     let image: NSImage?

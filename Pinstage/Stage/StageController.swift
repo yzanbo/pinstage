@@ -603,7 +603,7 @@ final class StageController {
         item.bundleID.flatMap { appBadges[$0] } ?? []
     }
 
-    // MARK: - ウィンドウスイッチャーからの操作
+    // MARK: - ウインドウスイッチャーからの操作
 
     /// 選んだウインドウだけを、ステージに並べる（切り替え画面で、スペースで選んだもの。選んだ順に並べる）
     func present(_ items: [WindowItem], on screen: NSScreen) {

@@ -36,7 +36,7 @@ final class StripController {
     var isDragging = false
     /// バーの外を移動するウインドウの見本（すべてのバーで共有）。
     weak var windowDragFeedback: StripWindowDragFeedback?
-    /// このウインドウバーからウィンドウスイッチャーを開いている間は、自動で隠さない。
+    /// このウインドウバーからウインドウスイッチャーを開いている間は、自動で隠さない。
     var windowSwitcherIsOpen = false
     /// 隠していたストリップを出した（サムネイルをすぐ撮り直すため）
     var onShow: (() -> Void)?
