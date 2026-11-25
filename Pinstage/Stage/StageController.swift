@@ -7,7 +7,8 @@ import PinstageCore
 ///
 /// - ディスプレイごとにステージを持つ（ストリップを押したディスプレイのステージを変える）
 /// - ストリップのクリック・⌘＋クリック・ドラッグで、ステージの組み合わせを変える
-/// - 変えるたびに、そのディスプレイの型で並べて最前面に出す
+/// - ストリップで変えたときは、そのディスプレイの型で並べて最前面に出す
+/// - ストリップの外でウインドウを前に出したときは、配置を変えずに選択だけを合わせる
 /// - グループと登録した型は、ファイルに保存して再起動のあとも残す
 ///
 /// グループの保存・編集は StageController+Groups.swift、登録した型は StageController+Layouts.swift にある。
@@ -15,6 +16,8 @@ import PinstageCore
 final class StageController {
     /// いま開いているウインドウ（ウインドウバーの並び順。新しく開いたものが末尾。ほかのデスクトップのものも含む）
     private(set) var windows: [WindowItem] = []
+    /// 実際に前面で使った順。ウインドウバーの並びとは別に持つ。
+    private(set) var windowFocusHistory = WindowFocusHistory<AXUIElement>()
     /// いま見ているデスクトップ（操作スペース）にあるウインドウ
     private(set) var currentSpaceIDs: Set<AXUIElement> = []
     /// どのデスクトップのストリップにも並べるウインドウ（最小化したもの・隠したアプリのもの。画面に出ていないので、どのデスクトップのものか分からない）
@@ -85,6 +88,11 @@ final class StageController {
     /// ウインドウを読み直したときにすること（ストリップが一覧を覚え直す・ストリップに重なったウインドウを戻す）
     @ObservationIgnored private var refreshHandlers: [() -> Void] = []
     @ObservationIgnored private var raiseTask: Task<Void, Never>?
+    /// 並べる操作で前に出したアプリ（遅れて届くフォーカスの知らせの見分けに使う）
+    @ObservationIgnored private var raisedAppPIDs: Set<pid_t> = []
+    @ObservationIgnored private var focusSyncTask: Task<Void, Never>?
+    /// 前に確かめたフォーカス。同じウインドウのままなら、ストリップで明示的に外した選択を書き戻さない
+    @ObservationIgnored private var lastFocus: (pid: pid_t, window: AXUIElement?)?
     /// 起動して初めてウインドウを読んだときに、覚えた並び順に並べ直したか
     @ObservationIgnored private var restoredWindowOrder = false
     @ObservationIgnored private let log = Logger(subsystem: "app.pinstage.Pinstage", category: "Stage")
@@ -118,6 +126,7 @@ final class StageController {
         refreshTimer?.invalidate()
         windowListTimer?.invalidate()
         raiseTask?.cancel()
+        cancelFocusSync()
         saveWindowOrder()
     }
 
@@ -145,17 +154,27 @@ final class StageController {
         let stageManagerOn = SystemStageManager.isEnabled
         if stageManagerOn != isSystemStageManagerOn { isSystemStageManagerOn = stageManagerOn }
         guard isTrusted else {
-            if !windows.isEmpty { windows = [] }
+            if !windows.isEmpty {
+                windows = []
+                windowFocusHistory = WindowFocusHistory()
+            }
+            lastFocus = nil
             return
         }
         let next = readWindows()
+        let existing = Set(next.map(\.id))
         // 変わったときだけ入れ直す（変わらないのに入れ直すと、ストリップ全体が 1.5 秒ごとに描き直される）
-        if next != windows { windows = next }
+        if next != windows {
+            windows = next
+            windowFocusHistory.prune(keeping: existing)
+        }
         classify(next)
         var pruned = board
-        pruned.prune(keeping: Set(next.map(\.id)))
+        pruned.prune(keeping: existing)
         if pruned != board { board = pruned }
         refreshHandlers.forEach { $0() }
+        // フォーカス変更の知らせに対応していないアプリや、まだ一覧になかったウインドウも拾う
+        if focusSyncTask == nil { syncFocusedWindow() }
         discoverOtherSpaceWindows()
     }
 
@@ -215,6 +234,7 @@ final class StageController {
     /// デスクトップを切り替えた（StripManager から）
     func noteSpaceChanged() {
         spaceChangedAt = ProcessInfo.processInfo.systemUptime
+        scheduleFocusSync()
     }
 
     /// ウインドウのあるデスクトップの名前（except のデスクトップにあるとき・分からないときは nil）
@@ -356,6 +376,61 @@ final class StageController {
         updateStage(on: screen, apply: true) { $0.layout = choice }
     }
 
+    // MARK: - ストリップの外で前に出したウインドウ
+
+    /// アプリの切り替えや Mission Control の直後は、前面アプリとフォーカスが落ち着くまで少し待つ
+    func scheduleFocusSync() {
+        guard isTrusted, raiseTask == nil else { return }
+        cancelFocusSync()
+        focusSyncTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled, let self else { return }
+            focusSyncTask = nil
+            syncFocusedWindow()
+        }
+    }
+
+    private func cancelFocusSync() {
+        focusSyncTask?.cancel()
+        focusSyncTask = nil
+    }
+
+    private func syncFocusedWindow(ignoring raisedPIDs: Set<pid_t> = []) {
+        guard isTrusted, raiseTask == nil,
+              let app = NSWorkspace.shared.frontmostApplication, app.hasManageableWindows else { return }
+        let pid = app.processIdentifier
+        if lastFocus?.pid != pid { lastFocus = (pid, nil) }
+        guard let focused = AXWindow.focusedWindow(of: pid), lastFocus?.window != focused else { return }
+        // 自分で並べた直後は、そのアプリが一時的に別のウインドウを前に出しても選択を崩さない。
+        let keepsSelection = raisedPIDs.contains(pid)
+        if keepsSelection { lastFocus = (pid, focused) }
+        guard let (item, entry) = visibleFocus(focused, pid: pid) else { return }
+        if windowFocusHistory.mostRecent != item.id { windowFocusHistory.record(item.id) }
+        guard !keepsSelection, !AXWindow.isFullScreen(focused) else { return }
+        // ウインドウバーが 1 つのときはそこに、複数あるときは実際にウインドウがある画面に反映する。
+        let screen = separatesDisplays
+            ? (entry?.bounds ?? AXWindow.frame(of: focused)).flatMap { DisplayLocator().display(for: $0)?.screen }
+            : stripScreens.first
+        guard let screen else { return }
+        lastFocus = (pid, focused)
+        var next = board
+        guard next.followFocus(of: item.id, on: Self.displayKey(screen)) else { return }
+        cancelPlacementCheck(on: screen)
+        board = next
+    }
+
+    /// フォーカスされた要素から、いま画面に出ている実際のウインドウを特定する。
+    private func visibleFocus(_ focused: AXUIElement, pid: pid_t) -> (WindowItem, WindowListEntry?)? {
+        let number = SkyLight.windowID(of: focused)
+        guard let item = windows.first(where: { $0.pid == pid && ($0.id == focused || (number != nil && $0.windowID == number)) })
+        else { return nil }
+        // 切り替えの途中で、移動前のデスクトップのウインドウや最小化したものが返ることがある。
+        if let id = number ?? item.windowID {
+            let entry = WindowListEntry.onScreen().first { $0.number == Int(id) && $0.pid == pid && $0.layer == 0 }
+            return entry.map { (item, $0) }
+        }
+        return desktopSnapshot?.onScreen.contains(item.id) == true ? (item, nil) : nil
+    }
 
     // MARK: - 並べて前に出す
 
@@ -467,23 +542,31 @@ final class StageController {
     /// 後ろから順に前に出す（最後のものが最前面）。アプリを切り替えるたびに少し待つ
     private func raise(_ items: [WindowItem]) {
         raiseTask?.cancel()
+        cancelFocusSync()
         raiseTask = Task {
             for item in items {
                 if Task.isCancelled { return }
-                // ほかのデスクトップのウインドウは、そのデスクトップへ移って前に出す
-                if isOnOtherSpace(item), let id = item.windowID {
-                    SkyLight.focus(windowID: id, pid: item.pid)
-                }
-                AXWindow.raise(item.id, pid: item.pid)
+                raisedAppPIDs.insert(item.pid)
+                raiseWindow(item)
                 try? await Task.sleep(for: .milliseconds(50))
             }
+            // 前に出すよう頼んだあとで届く、アプリ自身のフォーカス変更が落ち着くのを待つ。
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            raiseTask = nil
+            let raised = raisedAppPIDs
+            raisedAppPIDs.removeAll()
+            syncFocusedWindow(ignoring: raised)
         }
     }
 
-    /// ほかのデスクトップ（いま表に出ていないデスクトップ）にあるウインドウか
-    private func isOnOtherSpace(_ item: WindowItem) -> Bool {
-        guard let spaces = windowSpaces?[item.id], !spaces.isEmpty else { return false }
-        return spaces.isDisjoint(with: SkyLight.currentSpaces())
+    /// 配置は変えずに前に出す。別のデスクトップにあれば、そこへ移る。
+    func raiseWindow(_ item: WindowItem) {
+        if let spaces = windowSpaces?[item.id], !spaces.isEmpty, spaces.isDisjoint(with: SkyLight.currentSpaces()),
+           let id = item.windowID ?? SkyLight.windowID(of: item.id) {
+            SkyLight.focus(windowID: id, pid: item.pid)
+        }
+        AXWindow.raise(item.id, pid: item.pid)
     }
 
     // MARK: - 閉じる・終了する

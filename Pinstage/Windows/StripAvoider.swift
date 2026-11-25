@@ -13,9 +13,11 @@ import PinstageCore
 ///
 /// 同じ受け取り口で、ウインドウが開いた・閉じた・しまわれた・戻された知らせと、アプリを隠した・終了した知らせも受け取り、
 /// onWindowsChanged で知らせる（ウインドウバーの一覧を、1.5 秒ごとの読み直しを待たずに、すぐ変えるため）。
+/// 前面のアプリや、その中でフォーカスされたウインドウが変わったことも知らせる。
 final class StripAvoider {
     /// ウインドウが開いた・閉じた・しまわれた・戻された・アプリを隠した・終了したとき（すぐ読み直すため）
     var onWindowsChanged: (() -> Void)?
+    var onFocusChanged: (() -> Void)?
     private var pendingListChange: Task<Void, Never>?
 
     private let stage: StageController
@@ -60,6 +62,9 @@ final class StripAvoider {
                 self?.scheduleListChange()
             }
         })
+        workspaceObservers.append(center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onFocusChanged?() }
+        })
         // アプリを隠した・隠すのをやめたときも、一覧が変わる
         for name in [NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification] {
             workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -85,7 +90,8 @@ final class StripAvoider {
         guard AXObserverCreate(pid, stripAvoiderCallback, &created) == .success, let observer = created else { return }
         let app = AXUIElementCreateApplication(pid)
         for name in [kAXWindowCreatedNotification, kAXWindowMovedNotification, kAXWindowResizedNotification,
-                     kAXWindowMiniaturizedNotification, kAXWindowDeminiaturizedNotification] {
+                     kAXWindowMiniaturizedNotification, kAXWindowDeminiaturizedNotification,
+                     kAXFocusedWindowChangedNotification] {
             AXObserverAddNotification(observer, app, name as CFString, refcon)
         }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
@@ -122,7 +128,11 @@ final class StripAvoider {
     }
 
     /// 知らせを受け取った（アクセシビリティの API から）
-    fileprivate func received(_ notification: String) {
+    fileprivate func received(_ notification: String, pid: pid_t?) {
+        if notification == kAXFocusedWindowChangedNotification {
+            if let pid, pid == NSWorkspace.shared.frontmostApplication?.processIdentifier { onFocusChanged?() }
+            return
+        }
         if Self.listNotifications.contains(notification) { scheduleListChange() }
         if Self.frameNotifications.contains(notification) { scheduleCheck() }
     }
@@ -206,7 +216,7 @@ final class StripAvoider {
     }
 }
 
-/// ウインドウが動いた・大きさが変わった・開いた・閉じた・しまわれた・戻された知らせ（アクセシビリティの API から呼ばれる）
+/// ウインドウの知らせ（アクセシビリティの API から呼ばれる）
 private nonisolated func stripAvoiderCallback(
     _ observer: AXObserver,
     _ element: AXUIElement,
@@ -216,5 +226,7 @@ private nonisolated func stripAvoiderCallback(
     guard let refcon else { return }
     let avoider = Unmanaged<StripAvoider>.fromOpaque(refcon).takeUnretainedValue()
     let name = notification as String
-    Task { @MainActor in avoider.received(name) }
+    var owner: pid_t = 0
+    let pid = name == kAXFocusedWindowChangedNotification && AXUIElementGetPid(element, &owner) == .success ? owner : nil
+    Task { @MainActor in avoider.received(name, pid: pid) }
 }

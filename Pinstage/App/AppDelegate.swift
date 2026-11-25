@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 常に出しているウインドウバーの後ろに、ウインドウを入り込ませない。
         // ウインドウが開いた・閉じたなどの知らせも受け取り、1.5 秒ごとの読み直しを待たずに、すぐ一覧を変える
         stripAvoider.onWindowsChanged = { [weak self] in self?.stage.refresh() }
+        stripAvoider.onFocusChanged = { [weak self] in self?.stage.scheduleFocusSync() }
         stripAvoider.start()
         shortcuts.perform = { [weak self] action in self?.perform(action) }
         shortcuts.start()

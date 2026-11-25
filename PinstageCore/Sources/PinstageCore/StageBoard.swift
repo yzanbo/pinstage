@@ -33,6 +33,15 @@ public struct StageBoard<ID: Hashable>: Equatable {
         }
     }
 
+    /// 外で前に出したウインドウに選択だけを合わせる。すでに組み合わせに入っていれば、そのまま保つ。
+    /// - Returns: 選択が変わったか（並べ方は変えない）
+    @discardableResult
+    public mutating func followFocus(of id: ID, on display: String) -> Bool {
+        guard !stages.values.contains(where: { $0.selection.contains(id) }) else { return false }
+        update(on: display) { $0.selection.showOnly(id) }
+        return true
+    }
+
     /// 閉じたウインドウを、すべてのステージから外す
     public mutating func prune(keeping existing: Set<ID>) {
         for key in stages.keys {

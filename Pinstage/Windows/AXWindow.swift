@@ -68,11 +68,15 @@ enum AXWindow {
         return minimized
     }
 
+    /// そのアプリが実際にフォーカスしているウインドウ（ウインドウがなければ nil）
+    static func focusedWindow(of pid: pid_t) -> AXUIElement? {
+        attribute(AXUIElementCreateApplication(pid), kAXFocusedWindowAttribute)
+    }
+
     /// いちばん前のアプリの、いま使っているウインドウがフルスクリーンか（フルスクリーンのデスクトップには、ストリップを出さない）
     static func frontmostWindowIsFullScreen() -> Bool {
-        guard let app = NSWorkspace.shared.frontmostApplication else { return false }
-        let axApp = AXUIElementCreateApplication(app.processIdentifier)
-        guard let window: AXUIElement = attribute(axApp, kAXFocusedWindowAttribute) else { return false }
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              let window = focusedWindow(of: app.processIdentifier) else { return false }
         return isFullScreen(window)
     }
 

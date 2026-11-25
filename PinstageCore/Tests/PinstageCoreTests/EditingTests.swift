@@ -154,6 +154,45 @@ struct StageBoardTests {
         #expect(board.stage(on: "B").layout == .builtIn(.auto))
     }
 
+    @Test("組み合わせ内のウインドウを前に出しても、選択と並び順はそのまま")
+    func focusWithinStage() {
+        var board = StageBoard<String>()
+        board.update(on: "A") { $0.selection.replace(with: ["a1", "b1"]) }
+        let before = board
+        let changed = board.followFocus(of: "a1", on: "A")
+        #expect(!changed)
+        #expect(board == before)
+    }
+
+    @Test("組み合わせ外を前に出すとそのウインドウだけを選び、次はそこに足す")
+    func focusOutsideStage() {
+        var board = StageBoard<String>()
+        board.update(on: "A") {
+            $0.selection.replace(with: ["a1", "b1"])
+            $0.layout = .builtIn(.rows)
+        }
+        board.update(on: "B") { $0.selection.replace(with: ["c1", "d1"]) }
+        let other = board.stage(on: "B")
+        let changed = board.followFocus(of: "a2", on: "A")
+        #expect(changed)
+        #expect(board.stage(on: "A").selection.members == ["a2"])
+        #expect(board.stage(on: "A").layout == .builtIn(.rows))
+        #expect(board.stage(on: "B") == other)
+        board.update(on: "A") { $0.selection.toggle("b1") }
+        #expect(board.stage(on: "A").selection.members == ["a2", "b1"])
+    }
+
+    @Test("すでに別のディスプレイの組み合わせに入っているときは、それを崩さない")
+    func focusOnExistingStage() {
+        var board = StageBoard<String>()
+        board.update(on: "A") { $0.selection.showOnly("a1") }
+        board.update(on: "B") { $0.selection.replace(with: ["b1", "b2"]) }
+        let before = board
+        let changed = board.followFocus(of: "b1", on: "A")
+        #expect(!changed)
+        #expect(board == before)
+    }
+
     @Test("閉じたウインドウは、すべてのステージから外れる")
     func prune() {
         var board = StageBoard<String>()
