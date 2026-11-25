@@ -86,7 +86,7 @@ public struct WindowSwitcherSettings: Equatable, Sendable {
         public var title: String {
             switch self {
             case .onModifierRelease: "修飾キーを離して確定"
-            case .explicit: "Enterで確定"
+            case .explicit: "Enter で確定"
             }
         }
     }
@@ -338,5 +338,41 @@ public enum WindowSwitcherNavigation {
         let offset = vertical ? item % width : 0
         let firstInRow = forward ? 0 : vertical ? (last / width) * width : last
         return Position(section: other, item: min(firstInRow + offset, last))
+    }
+}
+
+/// ウインドウスイッチャーを開いているときに使えるキーの説明。画面の下の案内と、設定のタブの一覧を、この 1 つから作る（片方だけ直してずれないように）
+public enum WindowSwitcherKeyGuide {
+    public struct Entry: Equatable, Sendable {
+        /// キー（「⌘W」など）
+        public let keys: String
+        /// 画面の下の案内に出す、短い説明
+        public let short: String
+        /// 設定のタブに出す、くわしい説明
+        public let detail: String
+        /// 画面の下の案内では、右寄せの組（⌘ との組み合わせ）
+        public let isCommand: Bool
+        /// 画面の下の案内にも出すか（幅が足りないので、設定のタブだけに出すものがある）
+        public let showsInHints: Bool
+    }
+
+    public static let entries: [Entry] = [
+        Entry(keys: "↑↓←→・Tab", short: "選ぶ", detail: "選ぶ（⇧Tab で戻る）", isCommand: false, showsInHints: true),
+        Entry(keys: "↩", short: "開く", detail: "選んだウインドウに切り替える（修飾キーを離しても）", isCommand: false, showsInHints: true),
+        Entry(keys: "space", short: "選んで並べる", detail: "選んでおき、↩ でまとめてステージに並べる", isCommand: false, showsInHints: true),
+        Entry(keys: "文字", short: "絞り込み", detail: "名前で絞り込む（⌫ で 1 文字戻す）", isCommand: false, showsInHints: true),
+        Entry(keys: "1〜9", short: "デスクトップへ", detail: "そのデスクトップへ移る（デスクトップ別のとき）", isCommand: false, showsInHints: false),
+        Entry(keys: "esc", short: "閉じる", detail: "閉じる（絞り込み・選んだものがあれば、先にそれを消す）", isCommand: false, showsInHints: true),
+        Entry(keys: "⌘W", short: "閉じる", detail: "ウインドウを閉じる", isCommand: true, showsInHints: true),
+        Entry(keys: "⌘Q", short: "終了", detail: "アプリを終了する", isCommand: true, showsInHints: true),
+        Entry(keys: "⌘M", short: "しまう", detail: "ウインドウをしまう", isCommand: true, showsInHints: true),
+        Entry(keys: "⌘G", short: "グループ分け", detail: "グループ分けを切り替える", isCommand: true, showsInHints: true),
+        Entry(keys: "⌘1〜3", short: "見た目", detail: "見た目を変える（一覧・アイコンだけ・サムネイル）", isCommand: true, showsInHints: true),
+    ]
+
+    /// 画面の下の案内に出すもの（左の組・右の組）
+    public static var hints: (leading: [Entry], trailing: [Entry]) {
+        let shown = entries.filter(\.showsInHints)
+        return (shown.filter { !$0.isCommand }, shown.filter(\.isCommand))
     }
 }

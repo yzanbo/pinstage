@@ -248,18 +248,12 @@ struct DesktopPickerView: View {
 /// 切り替え画面の、下の操作の案内
 private struct DesktopPickerHints: View {
     var body: some View {
+        // 設定のタブの一覧と同じものから作る（PinstageCore の WindowSwitcherKeyGuide）
+        let hints = WindowSwitcherKeyGuide.hints
         HStack(spacing: 12) {
-            hint("↑↓←→・Tab", "選ぶ")
-            hint("↩", "開く")
-            hint("space", "選んで並べる")
-            hint("文字", "絞り込み")
-            hint("esc", "閉じる")
+            ForEach(hints.leading, id: \.keys) { hint($0.keys, $0.short) }
             Spacer(minLength: 0)
-            hint("⌘W", "閉じる")
-            hint("⌘Q", "終了")
-            hint("⌘M", "しまう")
-            hint("⌘G", "グループ分け")
-            hint("⌘1〜3", "見た目")
+            ForEach(hints.trailing, id: \.keys) { hint($0.keys, $0.short) }
         }
         .font(.caption2)
         .foregroundStyle(.secondary)

@@ -59,9 +59,11 @@ enum StripPreview {
         case desktopDisplayGroups
         /// 設定の「型」のタブ
         case layouts
-        /// 設定の「一般」「ストリップ」「ショートカット」「自動化」のタブ
+        /// 設定の「一般」「ウインドウバー」「ショートカット」「自動化」のタブ
         case general
         case strip
+        /// 設定の「ウインドウスイッチャー」のタブ
+        case switcher
         case shortcuts
         case automation
     }
@@ -167,6 +169,10 @@ enum StripPreview {
                 write(GeneralSettingsView(stage: stage, thumbnails: ThumbnailStore(), launchAtLogin: LaunchAtLogin()), size: nil, to: url)
             case .strip:
                 write(StripSettingsView(stage: stage, thumbnails: ThumbnailStore()), size: nil, to: url)
+            case .switcher:
+                let shortcuts = ShortcutCenter()
+                write(SwitcherSettingsView(stage: stage, thumbnails: ThumbnailStore(), shortcuts: shortcuts,
+                                           recorder: ShortcutRecorderModel(shortcuts: shortcuts)), size: nil, to: url)
             case .shortcuts:
                 let shortcuts = ShortcutCenter()
                 write(ShortcutSettingsView(shortcuts: shortcuts, recorder: ShortcutRecorderModel(shortcuts: shortcuts), stage: stage), size: nil, to: url)

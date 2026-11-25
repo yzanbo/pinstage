@@ -114,9 +114,9 @@ clean:
 	rm -rf $(DERIVED_DATA) PinstageCore/.build
 
 # 画面の見た目を、見本のデータで画像に描き出す（アプリを起動せずに見た目を確かめる。build/preview に書き出す）。
-# ストリップ（見た目ごと。左に置いたとき・下に置いたとき・アイコンの並びを 1 列まで狭めたとき）と、グループの編集画面・型の編集画面・検索・設定のタブ（一般・ストリップ・型・ショートカット・自動化）
+# ストリップ（見た目ごと。左に置いたとき・下に置いたとき・アイコンの並びを 1 列まで狭めたとき）と、グループの編集画面・型の編集画面・検索・設定のタブ（一般・ウインドウバー・ウインドウスイッチャー・型・ショートカット・自動化）
 PREVIEW_LOOKS := grid gridLarge list listLarge thumbnail thumbnailLarge
-PREVIEW_VIEWS := groupEditor layoutEditor search desktopPicker desktopOverview desktopOverviewIcons desktopOverviewThumbnails desktopDisplayGroups layouts general strip shortcuts automation
+PREVIEW_VIEWS := groupEditor layoutEditor search desktopPicker desktopOverview desktopOverviewIcons desktopOverviewThumbnails desktopDisplayGroups layouts general strip switcher shortcuts automation
 preview: build
 	mkdir -p build/preview
 	@for look in $(PREVIEW_LOOKS); do \

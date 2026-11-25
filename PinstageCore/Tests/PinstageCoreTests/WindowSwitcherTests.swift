@@ -227,4 +227,15 @@ struct WindowSwitcherTests {
         #expect(Navigation.moving(from: next, .up, counts: counts, columns: 3) == row2)
         #expect(Navigation.moving(from: .init(section: 0, item: 2), .down, counts: counts, columns: 3) == row2)
     }
+
+    @Test("使えるキーの説明は 1 つの一覧から。画面の下の案内は、⌘ の組み合わせを右に分け、設定のタブだけのものは出さない")
+    func keyGuide() {
+        let entries = WindowSwitcherKeyGuide.entries
+        #expect(Set(entries.map(\.keys)).count == entries.count)
+        let hints = WindowSwitcherKeyGuide.hints
+        #expect(hints.trailing.allSatisfy { $0.keys.hasPrefix("⌘") })
+        #expect(hints.leading.allSatisfy { !$0.keys.hasPrefix("⌘") })
+        #expect(hints.leading.count + hints.trailing.count == entries.filter(\.showsInHints).count)
+        #expect(!hints.leading.contains { $0.keys == "1〜9" })
+    }
 }

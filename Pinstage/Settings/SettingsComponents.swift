@@ -146,3 +146,22 @@ struct NoticeRow: View {
         }
     }
 }
+
+/// 画面収録の許可がない間の案内（サムネイルの代わりにアイコンで表示していること。システム設定を開くボタン付き）
+struct ScreenCapturePermissionNotice: View {
+    let text: String
+
+    var body: some View {
+        NoticeRow(text: text, button: "画面収録を開く", action: ThumbnailStore.openSettings)
+    }
+}
+
+extension View {
+    /// システム設定で画面収録の許可を変えて戻ってきたときに、許可を問い合わせ直す（撮り直しは「一般」のタブが行う）
+    func refreshesScreenCapturePermission(_ thumbnails: ThumbnailStore, then action: @escaping () -> Void = {}) -> some View {
+        onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            thumbnails.refreshPermission()
+            action()
+        }
+    }
+}

@@ -2,7 +2,7 @@ import AppKit
 import PinstageCore
 import SwiftUI
 
-/// 「一般」のタブ: 起動・ステージ・macOS の設定・バージョン（ストリップの設定は「ストリップ」のタブ）
+/// 「一般」のタブ: 起動・ステージ・macOS の設定・バージョン（ウインドウバー・ウインドウスイッチャーの設定は、それぞれのタブ）
 struct GeneralSettingsView: View {
     let stage: StageController
     let thumbnails: ThumbnailStore
@@ -33,7 +33,7 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            Section("ウインドウを出すとき") {
+            Section("ステージ") {
                 OptionPicker(
                     "1 枚だけ出すときの大きさ",
                     info: "ウインドウバーでウインドウを 1 つだけクリックしたときの大きさです（登録した型・記録した配置のときは、型の大きさになります）。ダブルクリックすると、いつもステージいっぱいに広げます。",
@@ -52,7 +52,7 @@ struct GeneralSettingsView: View {
                 )
                 SystemStatusRow(
                     title: "画面収録",
-                    note: "形式が「サムネイル」のときだけ、ウインドウの中身を映すために使います。",
+                    note: "ウインドウバー・\(WindowSwitcherSettings.title)をサムネイルで表示するときだけ、ウインドウの中身を映すために使います。",
                     isOK: thumbnails.hasPermission,
                     okLabel: "許可しています",
                     button: "システム設定を開く",
