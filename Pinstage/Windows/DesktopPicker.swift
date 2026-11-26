@@ -570,18 +570,20 @@ final class DesktopPickerController: NSObject, NSWindowDelegate {
     }
 
     #if DEBUG
-    /// 見本に描く一覧と、その大きさ（本物と同じく中身に合わせる）
-    /// - Parameter desktop: 最初に選ぶデスクトップ（ウインドウバーのボタンから開いたとき）
+    /// 見本に描く一覧と、その大きさ（本物と同じく中身に合わせる）。model にキーを送ると、選択・印が本物と同じく変わる（README の画像で使う）
+    /// - Parameters:
+    ///   - desktop: 最初に選ぶデスクトップ（ウインドウバーのボタンから開いたとき）
+    ///   - visible: 開くディスプレイの使える範囲（本物と同じく、この中に収まるように並べる）
     static func preview(
         stage: StageController, screen: NSScreen, focusing desktop: UInt64? = nil,
-        appearance: WindowSwitcherSettings.Appearance = .icons
-    ) -> (view: some View, size: CGSize) {
+        appearance: WindowSwitcherSettings.Appearance = .icons, fitting visible: CGRect = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+    ) -> (model: DesktopPickerModel, view: some View, size: CGSize) {
         let model = DesktopPickerModel(stage: stage, screen: screen, thumbnails: ThumbnailStore(),
                                        appearance: appearance, focusing: desktop)
-        let size = model.fitOverview(in: CGRect(x: 0, y: 0, width: 1600, height: 1000))
+        let size = model.fitOverview(in: visible)
         // 見本に実際の画面は撮らない。撮れないときのアイコンと名前を描く。
         model.finish()
-        return (DesktopPickerView(model: model), size)
+        return (model, DesktopPickerView(model: model), size)
     }
     #endif
 }

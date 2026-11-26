@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import Carbon.HIToolbox
 import PinstageCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -13,7 +14,8 @@ import UniformTypeIdentifiers
 ///
 /// - hero.png: 全体の見本（左のウインドウバーと、ステージに並べた 2 つのウインドウ）
 /// - arrange.gif: 行のクリックでそのウインドウだけを出す → ⌘＋クリックで横に足す
-/// - switcher.png: ウインドウスイッチャー（⌥Tab）
+/// - groups.gif: ＋ からステージをグループとして保存 → グループの行で呼び出す → ⌃⌥3 で保存したグループに戻す
+/// - switcher.gif: ⌥Tab でウインドウスイッチャーを開く → Tab とスペースで 2 つ選ぶ → ↩ でステージに並べる
 enum ReadmeImages {
     /// 2 倍の画素で描く（PNG はそのまま、GIF は 1 倍にして軽くする）
     private static let scale: CGFloat = 2
@@ -27,7 +29,9 @@ enum ReadmeImages {
             let scene = Scene(sample: sample)
             write("hero.png", folder) { try writePNG(scene.hero(), to: $0) }
             write("arrange.gif", folder) { try writeGIF(scene.arrange(), to: $0) }
-            write("switcher.png", folder) { try writePNG(scene.switcher(), to: $0) }
+            write("switcher.gif", folder) { try writeGIF(scene.switcher(), to: $0) }
+            // グループを足すので、最後に作る
+            write("groups.gif", folder) { try writeGIF(scene.groups(), to: $0) }
         }
     }
 
@@ -60,13 +64,13 @@ enum ReadmeImages {
         }
 
         /// ステージに並べたときの枠（アプリと同じ並べ方。1 枚なら「1 枚だけ出すときの大きさ」の初期設定で、いまの幅のまま縦いっぱい）
-        func frames(for count: Int) -> [CGRect] {
+        func frames(for count: Int, layout: LayoutChoice = .builtIn(.auto)) -> [CGRect] {
             // 並べ方は上が原点の座標（アクセシビリティの座標）で計算するので、ステージの真ん中で上下を折り返して渡し、戻す
             let flip = { ScreenCoordinates.toAccessibility($0, primaryScreenHeight: stage.maxY + stage.minY) }
             let area = flip(stage)
             let frames = count == 1
                 ? [StageLayout.singleFrame(current: area.insetBy(dx: area.width * 0.18, dy: area.height * 0.12), in: area, size: .default)]
-                : LayoutChoice.builtIn(.auto).frames(count: count, in: area, customLayouts: [])
+                : layout.frames(count: count, in: area, customLayouts: [])
             return frames.map(flip)
         }
     }
@@ -80,6 +84,7 @@ enum ReadmeImages {
 
         /// 見本のウインドウ（StripPreview の並び: Safari・メール・Finder・メモ・カレンダー・ターミナル）
         var safari: WindowItem { sample.windows[0] }
+        var mail: WindowItem { sample.windows[1] }
         var finder: WindowItem { sample.windows[2] }
 
         func desk(_ size: CGSize) -> Desk {
@@ -92,31 +97,40 @@ enum ReadmeImages {
             stage.updateStage(on: sample.screen, apply: false) { $0.selection.replace(with: selection.map(\.id)) }
             let strip = StripController(screen: sample.screen, spaceID: Self.desktop, stage: stage,
                                         thumbnails: ThumbnailStore(), shortcuts: ShortcutCenter(), actions: AppActions())
+            // ウインドウバーのパネルの中身を外す（出さないパネルの、仮の大きさの並びが、行の枠の記録に混ざらないように）
+            strip.close()
             // このデスクトップのウインドウを並べる
             strip.spaceState.windowIDs = Set(sample.windows.filter { stage.windowSpaces?[$0.id]?.contains(Self.desktop) ?? true }.map(\.id))
             let size = desk.strip.size
             let view = StripView(stage: stage, thumbnails: ThumbnailStore(), shortcuts: ShortcutCenter(), strip: strip, actions: AppActions())
                 .frame(width: size.width, height: size.height)
-            guard let image = StripPreview.snapshot(view, size: size, appearance: .aqua, transparent: true)?.cgImage else {
-                throw CocoaError(.fileWriteUnknown)
-            }
+            let image = try capture(view, size: size)
             // 行の枠（一覧の座標）を、ウインドウバーの中身の座標（左上が原点）にする。カーソルを行に置くのに使う
             let reorder = strip.windowReorder
             let rows = reorder.frames.mapValues { $0.offsetBy(dx: reorder.listFrame.minX, dy: reorder.listFrame.minY) }
-            return StripShot(image: image, frame: desk.strip, rows: rows)
+            return StripShot(image: image, frame: desk.strip, rows: rows, groups: strip.groupTargets.frames)
         }
 
         /// ステージに並べた items（アプリと同じ並べ方）
-        func placed(_ items: [WindowItem], on desk: Desk) -> [Placed] {
-            zip(items, desk.frames(for: items.count)).map { ($0, $1, 1) }
+        func placed(_ items: [WindowItem], on desk: Desk, layout: LayoutChoice = .builtIn(.auto)) -> [Placed] {
+            zip(items, desk.frames(for: items.count, layout: layout)).map { ($0, $1, 1) }
+        }
+
+        /// ステージの並びが before から after へ変わる途中（t: 0〜1）。両方にあるウインドウは動き、なくなるものは消え、増えるものは広がって現れる
+        func transition(from before: [Placed], to after: [Placed], _ t: CGFloat) -> [Placed] {
+            let leaving = before.filter { old in !after.contains { $0.item.id == old.item.id } }.map { ($0.item, $0.frame, 1 - t) }
+            let arriving = after.map { new in
+                before.first { $0.item.id == new.item.id }.map { (new.item, lerp($0.frame, new.frame, t), CGFloat(1)) }
+                    ?? (new.item, grow(new.frame, from: 0.92, t), t)
+            }
+            return leaving + arriving
         }
 
         /// デスクトップ・ステージのウインドウ・ウインドウバーを描く（メニューバーとカーソルは、その上に描く）
         func paint(_ canvas: Canvas, strip: StripShot, windows: [Placed]) {
             canvas.wallpaper()
             for window in windows {
-                // Finder はファイルの並び、ほかはブラウザのページ
-                canvas.appWindow(window.frame, title: window.item.title, alpha: window.alpha, content: window.item.id == finder.id ? .files : .page)
+                canvas.appWindow(window.frame, title: window.item.title, alpha: window.alpha, content: .init(window.item))
             }
             canvas.panel(strip.image, in: strip.frame, cornerRadius: 16)
         }
@@ -136,88 +150,227 @@ enum ReadmeImages {
         // MARK: arrange.gif
 
         func arrange() throws -> [GIFFrame] {
-            let size = CGSize(width: 760, height: 560)
-            let desk = desk(size)
+            let desk = desk(CGSize(width: 760, height: 560))
             let none = try strip(selection: [], on: desk)
             let one = try strip(selection: [safari], on: desk)
             let two = try strip(selection: [safari, finder], on: desk)
-            let single = desk.frames(for: 1)[0]
-            let pair = desk.frames(for: 2)
+            let single = placed([safari], on: desk)
+            let pair = placed([safari, finder], on: desk)
             let safariRow = none.center(ofRow: 0)
             let finderRow = none.center(ofRow: 2)
-            var gif: [GIFFrame] = []
-
-            /// 1 コマを描く（command: カーソルの横に ⌘ を出す）
-            func frame(_ shot: StripShot, cursor: CGPoint, windows: [Placed] = [], command: Bool = false, delay: Double) {
-                let canvas = Canvas(size: size, scale: ReadmeImages.scale)
-                paint(canvas, strip: shot, windows: windows)
-                canvas.menuBar()
-                canvas.cursor(at: cursor)
-                if command { canvas.key("⌘", near: cursor) }
-                gif.append(GIFFrame(image: downscale(canvas.image(), by: Int(ReadmeImages.scale)), delay: delay))
-            }
+            var film = Film(scene: self, size: desk.size)
 
             // 1. 何も出していないところから、Safari の行へ
             let start = CGPoint(x: desk.stage.midX, y: desk.stage.midY - 40)
-            frame(none, cursor: start, delay: 0.8)
-            for step in 1...10 {
-                frame(none, cursor: lerp(start, safariRow, CGFloat(step) / 10), delay: 0.04)
-            }
-            frame(none, cursor: safariRow, delay: 0.3)
+            film.add(none, windows: [], cursor: start, delay: 0.8)
+            for t in steps(10) { film.add(none, windows: [], cursor: lerp(start, safariRow, t), delay: 0.04) }
+            film.add(none, windows: [], cursor: safariRow, delay: 0.3)
             // 2. クリックすると、Safari だけがステージに出る
-            for step in 1...5 {
-                let t = CGFloat(step) / 5
-                frame(one, cursor: safariRow, windows: [(safari, grow(single, from: 0.92, t), t)], delay: 0.04)
-            }
-            frame(one, cursor: safariRow, windows: [(safari, single, 1)], delay: 1.0)
+            for t in steps(5) { film.add(one, windows: transition(from: [], to: single, t), cursor: safariRow, delay: 0.04) }
+            film.add(one, windows: single, cursor: safariRow, delay: 1.0)
             // 3. ⌘ を押しながら Finder の行へ
-            for step in 1...8 {
-                frame(one, cursor: lerp(safariRow, finderRow, CGFloat(step) / 8), windows: [(safari, single, 1)], command: true, delay: 0.04)
-            }
-            frame(one, cursor: finderRow, windows: [(safari, single, 1)], command: true, delay: 0.4)
+            for t in steps(8) { film.add(one, windows: single, cursor: lerp(safariRow, finderRow, t), key: "⌘", delay: 0.04) }
+            film.add(one, windows: single, cursor: finderRow, key: "⌘", delay: 0.4)
             // 4. ⌘＋クリックすると、Finder を横に足して、2 つを並べる
-            for step in 1...6 {
-                let t = CGFloat(step) / 6
-                frame(two, cursor: finderRow, windows: [(safari, lerp(single, pair[0], t), 1), (finder, grow(pair[1], from: 0.92, t), t)],
-                      command: true, delay: 0.04)
-            }
-            frame(two, cursor: finderRow, windows: placed([safari, finder], on: desk), delay: 2.0)
-            return gif
+            for t in steps(6) { film.add(two, windows: transition(from: single, to: pair, t), cursor: finderRow, key: "⌘", delay: 0.04) }
+            film.add(two, windows: pair, cursor: finderRow, delay: 2.0)
+            return film.frames
         }
 
-        // MARK: switcher.png
+        // MARK: groups.gif
 
-        func switcher() throws -> CGImage {
-            let canvas = Canvas(size: CGSize(width: 1200, height: 760), scale: ReadmeImages.scale)
-            let desk = desk(canvas.size)
-            let shot = try strip(selection: [safari, finder], on: desk)
+        func groups() throws -> [GIFFrame] {
+            let desk = desk(CGSize(width: 760, height: 700))
+            let pair = [safari, finder]
+            let develop = sample.groups[0]
+            let before = try strip(selection: pair, on: desk)
+            // ＋ から保存したグループ（本物には保存しない）
+            var saved: StageGroup?
+            sample.stage.editPreviewLibrary { library in
+                let content = StageGroup.Content(members: pair.compactMap(\.signature), layout: .builtIn(.auto), displayID: nil)
+                saved = library.addGroup(name: nil, content: content)
+            }
+            guard let saved else { throw CocoaError(.fileWriteUnknown) }
+            let afterSave = try strip(selection: pair, on: desk)
+            let recalled = try strip(selection: [safari, mail], on: desk)
+            let back = try strip(selection: pair, on: desk)
+            let pairWindows = placed(pair, on: desk)
+            let developWindows = placed([safari, mail], on: desk, layout: develop.layout)
+            // グループの見出しの ＋ と、そこから開くメニュー（highlighted: 選んでいる項目）
+            let plus = before.groupHeaderButton(above: develop.id)
+            let menuOrigin = CGPoint(x: plus.x - 10, y: plus.y - 14)
+            let saveItem = Canvas.menuItemCenter(0, origin: menuOrigin)
+            func menu(highlighted: Int?) -> (Canvas) -> Void {
+                { $0.menu(["ステージをグループとして保存", "見えている画面を記録"], highlighted: highlighted, origin: menuOrigin) }
+            }
+            let developRow = afterSave.center(ofGroup: develop.id)
+            let shortcut = "⌃⌥\(sample.stage.library.groups.firstIndex { $0.id == saved.id }.map { $0 + 1 } ?? 3)"
+            var film = Film(scene: self, size: desk.size)
+
+            // 1. Safari と Finder を並べたところから、グループの見出しの ＋ へ
+            let start = CGPoint(x: desk.stage.midX - 60, y: desk.stage.midY)
+            film.add(before, windows: pairWindows, cursor: start, delay: 0.8)
+            for t in steps(10) { film.add(before, windows: pairWindows, cursor: lerp(start, plus, t), delay: 0.04) }
+            // 2. ＋ を押すとメニューが開き、「ステージをグループとして保存」を選ぶ
+            film.add(before, windows: pairWindows, cursor: plus, delay: 0.5, above: menu(highlighted: nil))
+            for t in steps(5) {
+                film.add(before, windows: pairWindows, cursor: lerp(plus, saveItem, t), delay: 0.04, above: menu(highlighted: t == 1 ? 0 : nil))
+            }
+            film.add(before, windows: pairWindows, cursor: saveItem, delay: 0.5, above: menu(highlighted: 0))
+            // 3. グループの行が増える
+            film.add(afterSave, windows: pairWindows, cursor: saveItem, delay: 1.2)
+            // 4. グループ「開発」の行を押すと、そのグループの組み合わせに切り替わる
+            for t in steps(10) { film.add(afterSave, windows: pairWindows, cursor: lerp(saveItem, developRow, t), delay: 0.04) }
+            film.add(afterSave, windows: pairWindows, cursor: developRow, delay: 0.3)
+            for t in steps(6) { film.add(recalled, windows: transition(from: pairWindows, to: developWindows, t), cursor: developRow, delay: 0.04) }
+            film.add(recalled, windows: developWindows, cursor: developRow, delay: 1.2)
+            // 5. ⌃⌥3 で、保存したグループ（3 つ目）に戻る
+            film.add(recalled, windows: developWindows, cursor: developRow, key: shortcut, delay: 0.5)
+            for t in steps(6) {
+                film.add(back, windows: transition(from: developWindows, to: pairWindows, t), cursor: developRow, key: shortcut, delay: 0.04)
+            }
+            film.add(back, windows: pairWindows, cursor: developRow, delay: 2.0)
+            return film.frames
+        }
+
+        // MARK: switcher.gif
+
+        func switcher() throws -> [GIFFrame] {
+            let desk = desk(CGSize(width: 980, height: 700))
+            let pair = [safari, finder]
+            let before = try strip(selection: pair, on: desk)
             sample.stage.windowSwitcherSettings.appearance = .icons
-            let preview = DesktopPickerController.preview(stage: sample.stage, screen: sample.screen)
-            guard let picker = StripPreview.snapshot(preview.view, size: preview.size, appearance: .aqua, transparent: true)?.cgImage
-            else { throw CocoaError(.fileWriteUnknown) }
-            paint(canvas, strip: shot, windows: placed([safari, finder], on: desk))
-            // アプリと同じく、ディスプレイの真ん中に開く
-            let visible = Canvas.visibleFrame(in: canvas.size)
+            sample.stage.windowSwitcherSettings.displaySize = .small
+            // アプリと同じく、ディスプレイの使える範囲に収まるように並べて、真ん中に開く
+            let visible = Canvas.visibleFrame(in: desk.size)
+            let preview = DesktopPickerController.preview(stage: sample.stage, screen: sample.screen, fitting: visible)
             let pickerFrame = CGRect(x: visible.midX - preview.size.width / 2, y: visible.midY - preview.size.height / 2,
                                      width: preview.size.width, height: preview.size.height)
-            canvas.panel(picker, in: pickerFrame, cornerRadius: 22)
-            canvas.menuBar()
-            return canvas.image()
+            /// いまのウインドウスイッチャーを写す（keyCode を渡すと、本物と同じくそのキーを押してから写す）
+            func shoot(after keyCode: Int? = nil) throws -> CGImage {
+                if let keyCode { press(keyCode, on: preview.model) }
+                return try capture(preview.view, size: preview.size)
+            }
+            /// ウインドウスイッチャーを開いて重ねる（alpha: 濃さ。開く・閉じる途中は薄く、少し小さい）
+            func picker(_ image: CGImage, alpha: CGFloat = 1) -> (Canvas) -> Void {
+                { $0.panel(image, in: grow(pickerFrame, from: 0.96, alpha), cornerRadius: 18, alpha: alpha) }
+            }
+            // 選択と印を動かしながら写す（デスクトップ 1: Safari・メール・Finder・ターミナルの順）
+            let opened = try shoot()
+            let onMail = try shoot(after: kVK_Tab)
+            let markedMail = try shoot(after: kVK_Space)
+            let onFinder = try shoot(after: kVK_Tab)
+            let onTerminal = try shoot(after: kVK_Tab)
+            let markedBoth = try shoot(after: kVK_Space)
+            // ↩ で、印を付けたウインドウをステージに並べる（本物の confirm と同じ組み合わせ。見本なのでウインドウは動かさない）
+            let picked = preview.model.marked.compactMap(sample.stage.item(for:))
+            let after = try strip(selection: picked, on: desk)
+            let pairWindows = placed(pair, on: desk)
+            let pickedWindows = placed(picked, on: desk)
+            var film = Film(scene: self, size: desk.size)
+
+            // 1. Safari と Finder を並べたところで ⌥Tab を押すと、ウインドウスイッチャーが開く
+            film.add(before, windows: pairWindows, delay: 0.8)
+            for t in steps(4) { film.add(before, windows: pairWindows, caption: "⌥ Tab", delay: 0.04, above: picker(opened, alpha: t)) }
+            film.add(before, windows: pairWindows, caption: "⌥ Tab", delay: 0.7, above: picker(opened))
+            // 2. Tab でメールへ移り、スペースで印を付ける
+            film.add(before, windows: pairWindows, caption: "Tab", delay: 0.6, above: picker(onMail))
+            film.add(before, windows: pairWindows, caption: "スペース", delay: 0.8, above: picker(markedMail))
+            // 3. Tab でターミナルへ移り、スペースで印を付ける
+            film.add(before, windows: pairWindows, caption: "Tab", delay: 0.35, above: picker(onFinder))
+            film.add(before, windows: pairWindows, caption: "Tab", delay: 0.5, above: picker(onTerminal))
+            film.add(before, windows: pairWindows, caption: "スペース", delay: 0.9, above: picker(markedBoth))
+            // 4. ↩ を押すと閉じて、印を付けたウインドウがステージに並ぶ（ウインドウスイッチャーは前半で消える）
+            for t in steps(6) {
+                film.add(after, windows: transition(from: pairWindows, to: pickedWindows, t), caption: "↩", delay: 0.04,
+                         above: t <= 0.5 ? picker(markedBoth, alpha: 1 - t * 2) : { _ in })
+            }
+            film.add(after, windows: pickedWindows, caption: "↩", delay: 0.5)
+            film.add(after, windows: pickedWindows, delay: 2.0)
+            return film.frames
         }
+    }
+
+    /// GIF のコマを描きためる
+    private struct Film {
+        let scene: Scene
+        let size: CGSize
+        private(set) var frames: [GIFFrame] = []
+
+        init(scene: Scene, size: CGSize) {
+            self.scene = scene
+            self.size = size
+        }
+
+        /// 1 コマを描く。下から、デスクトップ・ステージのウインドウ・ウインドウバー・above（メニュー・ウインドウスイッチャーなど）・
+        /// メニューバー・カーソル（key: カーソルの横に出す、押しているキー）・caption（画面の下に出す、押したキー。キーボードだけで操作する場面）
+        mutating func add(_ strip: StripShot, windows: [Placed], cursor: CGPoint? = nil, key: String? = nil, caption: String? = nil,
+                          delay: Double, above: (Canvas) -> Void = { _ in }) {
+            let canvas = Canvas(size: size, scale: ReadmeImages.scale)
+            scene.paint(canvas, strip: strip, windows: windows)
+            above(canvas)
+            canvas.menuBar()
+            if let cursor {
+                canvas.cursor(at: cursor)
+                if let key { canvas.key(key, near: cursor) }
+            }
+            if let caption { canvas.keyCaption(caption) }
+            frames.append(GIFFrame(image: downscale(canvas.image(), by: Int(ReadmeImages.scale)), delay: delay))
+        }
+    }
+
+    /// アプリと同じ部品を、明るい見た目・透明な地で描き写す（架空のデスクトップに重ねる）
+    private static func capture(_ view: some View, size: CGSize) throws -> CGImage {
+        guard let image = StripPreview.snapshot(view, size: size, appearance: .aqua, transparent: true)?.cgImage else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return image
+    }
+
+    /// ウインドウスイッチャーに、キーを押したことを送る（Tab・スペース）
+    private static func press(_ keyCode: Int, on model: DesktopPickerModel) {
+        let characters = keyCode == kVK_Tab ? "\t" : " "
+        guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                                           characters: characters, charactersIgnoringModifiers: characters, isARepeat: false,
+                                           keyCode: UInt16(keyCode))
+        else { return }
+        _ = model.handleKey(event)
+    }
+
+    /// 動きの進み具合（count コマに分けた 1/count・2/count・…・1）
+    private static func steps(_ count: Int) -> [CGFloat] {
+        (1...count).map { CGFloat($0) / CGFloat(count) }
     }
 
     // MARK: - 写したもの
 
-    /// 写したウインドウバー（frame はキャンバスに置く枠。rows は、行の番号ごとの枠で、ウインドウバーの中身の座標・左上が原点）
+    /// 写したウインドウバー（frame はキャンバスに置く枠。rows はウインドウの行の番号ごと、groups はグループごとの行の枠。
+    /// 行の枠は、ウインドウバーの中身の座標で、左上が原点）
     private struct StripShot {
         let image: CGImage
         let frame: CGRect
         let rows: [Int: CGRect]
+        let groups: [UUID: CGRect]
 
-        /// その行の真ん中（キャンバスの座標）
+        /// ウインドウの行の真ん中（キャンバスの座標）
         func center(ofRow index: Int) -> CGPoint {
-            guard let row = rows[index] else { return CGPoint(x: frame.midX, y: frame.midY) }
-            return CGPoint(x: frame.minX + row.midX, y: frame.maxY - row.midY)
+            point(rows[index].map { CGPoint(x: $0.midX, y: $0.midY) })
+        }
+
+        /// グループの行の真ん中（キャンバスの座標）
+        func center(ofGroup id: UUID) -> CGPoint {
+            point(groups[id].map { CGPoint(x: $0.midX, y: $0.midY) })
+        }
+
+        /// グループの見出しの右の ＋（そのグループの行のすぐ上の行の、右端）
+        func groupHeaderButton(above id: UUID) -> CGPoint {
+            point(groups[id].map { CGPoint(x: $0.maxX - 14, y: $0.minY - 19) })
+        }
+
+        /// ウインドウバーの中身の座標を、キャンバスの座標にする（分からなければ、ウインドウバーの真ん中）
+        private func point(_ local: CGPoint?) -> CGPoint {
+            guard let local else { return CGPoint(x: frame.midX, y: frame.midY) }
+            return CGPoint(x: frame.minX + local.x, y: frame.maxY - local.y)
         }
     }
 
@@ -312,12 +465,25 @@ enum ReadmeImages {
             }
         }
 
-        /// ウインドウの中身の見本
+        /// ウインドウの中身の見本（アプリで決める）
         enum WindowContent {
-            /// ブラウザのページ（アドレスの欄と、見出し・文の行）
+            /// ブラウザのページ（アドレスの欄と、見出し・文の行。Safari）
             case page
-            /// ファイルの並び（Finder のような）
+            /// ファイルの並び（Finder）
             case files
+            /// 黒い地の文字（ターミナル）
+            case terminal
+            /// 見出しと文の行（ほかのアプリ）
+            case document
+
+            init(_ item: WindowItem) {
+                self = switch item.bundleID {
+                case "com.apple.Safari": .page
+                case "com.apple.finder": .files
+                case "com.apple.Terminal": .terminal
+                default: .document
+                }
+            }
         }
 
         /// 架空のアプリのウインドウ（影・白い地・3 つの丸と題の入った上のバー・中身の見本）
@@ -342,6 +508,8 @@ enum ReadmeImages {
             switch content {
             case .page: page(in: body)
             case .files: files(in: body)
+            case .terminal: terminal(in: body)
+            case .document: lines(in: body, top: body.maxY - 24)
             }
             context.restoreGState()
             for (index, hex) in [UInt32(0xFF5F57), 0xFEBC2E, 0x28C840].enumerated() {
@@ -379,15 +547,37 @@ enum ReadmeImages {
                 let address = text("github.com/yzanbo/pinstage", size: 11, color: .gray)
                 address.draw(at: CGPoint(x: field.midX - address.size().width / 2, y: field.midY - address.size().height / 2))
             }
-            // 見出しと文の行
+            lines(in: body, top: toolbar.minY - 24)
+        }
+
+        /// 見出しと文の行（top は見出しの上の端）
+        private func lines(in body: CGRect, top: CGFloat) {
             let left = body.minX + 24
             let width = body.width - 48
-            var y = toolbar.minY - 40
+            var y = top - 16
             bar(CGRect(x: left, y: y, width: width * 0.55, height: 16), 0xC9D3E0)
             y -= 30
             for (index, ratio) in [0.95, 0.88, 0.92, 0.6, 0.0, 0.9, 0.94, 0.85, 0.7, 0.0, 0.92, 0.8].enumerated() where y > body.minY + 16 {
                 if ratio > 0 { bar(CGRect(x: left, y: y, width: width * ratio, height: 7)) }
                 y -= index % 5 == 4 ? 14 : 16
+            }
+        }
+
+        /// ターミナルの見本（黒い地に、打った命令と出力の行）
+        private func terminal(in body: CGRect) {
+            context.setFillColor(color(0x1E1E1E))
+            context.fill(body)
+            let output: [(String, NSColor)] = [
+                ("% make test", .white), ("Building PinstageCore…", .lightGray), ("✔ Test run passed", NSColor(red: 0.4, green: 0.85, blue: 0.45, alpha: 1)),
+                ("% make run", .white), ("Pinstage を起動しました", .lightGray), ("% ", .white),
+            ]
+            withAppKit {
+                var y = body.maxY - 26
+                for (line, color) in output where y > body.minY + 8 {
+                    NSAttributedString(string: line, attributes: [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular), .foregroundColor: color])
+                        .draw(at: CGPoint(x: body.minX + 14, y: y))
+                    y -= 20
+                }
             }
         }
 
@@ -412,9 +602,10 @@ enum ReadmeImages {
             }
         }
 
-        /// 写した画面（ウインドウバー・ウインドウスイッチャー）を、影を付けて置く
-        func panel(_ image: CGImage, in frame: CGRect, cornerRadius: CGFloat) {
+        /// 写した画面（ウインドウバー・ウインドウスイッチャー）を、影を付けて置く（alpha: 濃さ。開く・閉じる途中は薄い）
+        func panel(_ image: CGImage, in frame: CGRect, cornerRadius: CGFloat, alpha: CGFloat = 1) {
             context.saveGState()
+            context.setAlpha(alpha)
             context.setShadow(offset: CGSize(width: 0, height: -6), blur: 18, color: color(0x000000, 0.22))
             context.beginTransparencyLayer(auxiliaryInfo: nil)
             context.addPath(CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil))
@@ -446,9 +637,56 @@ enum ReadmeImages {
             context.restoreGState()
         }
 
+        /// 押したキー（画面の下の真ん中に、大きな札で出す。キーボードだけで操作する場面で使う）
+        func keyCaption(_ label: String) {
+            let caption = text(label, size: 22, weight: .semibold, color: .white)
+            let rect = CGRect(x: size.width / 2 - (caption.size().width + 36) / 2, y: 18, width: caption.size().width + 36, height: 44)
+            context.addPath(CGPath(roundedRect: rect, cornerWidth: 12, cornerHeight: 12, transform: nil))
+            context.setFillColor(color(0x000000, 0.65))
+            context.fillPath()
+            withAppKit {
+                caption.draw(at: CGPoint(x: rect.midX - caption.size().width / 2, y: rect.midY - caption.size().height / 2))
+            }
+        }
+
+        /// メニューの項目の高さと、メニューの幅
+        static let menuItemHeight: CGFloat = 24
+        static let menuWidth: CGFloat = 230
+
+        /// 開いたメニューの、その番号の項目の真ん中（origin はメニューの左上の角）
+        static func menuItemCenter(_ index: Int, origin: CGPoint) -> CGPoint {
+            CGPoint(x: origin.x + menuWidth / 2, y: origin.y - 6 - menuItemHeight * (CGFloat(index) + 0.5))
+        }
+
+        /// 開いたメニュー（items を縦に並べ、highlighted の項目を選んだ色にする。origin は左上の角）
+        func menu(_ items: [String], highlighted: Int?, origin: CGPoint) {
+            let height = Self.menuItemHeight * CGFloat(items.count) + 12
+            let rect = CGRect(x: origin.x, y: origin.y - height, width: Self.menuWidth, height: height)
+            context.saveGState()
+            context.setShadow(offset: CGSize(width: 0, height: -4), blur: 14, color: color(0x000000, 0.25))
+            context.addPath(CGPath(roundedRect: rect, cornerWidth: 8, cornerHeight: 8, transform: nil))
+            context.setFillColor(color(0xF6F6F7, 0.98))
+            context.fillPath()
+            context.restoreGState()
+            for (index, item) in items.enumerated() {
+                let center = Self.menuItemCenter(index, origin: origin)
+                let row = CGRect(x: rect.minX + 5, y: center.y - Self.menuItemHeight / 2, width: rect.width - 10, height: Self.menuItemHeight)
+                if index == highlighted {
+                    context.addPath(CGPath(roundedRect: row, cornerWidth: 5, cornerHeight: 5, transform: nil))
+                    context.setFillColor(color(0x0A84FF))
+                    context.fillPath()
+                }
+                withAppKit {
+                    let label = text(item, size: 13, color: index == highlighted ? .white : .black)
+                    label.draw(at: CGPoint(x: row.minX + 12, y: row.midY - label.size().height / 2))
+                }
+            }
+        }
+
         /// 押しているキー（カーソルの右下に、キーの形の札で出す）
         func key(_ label: String, near point: CGPoint) {
-            let rect = CGRect(x: point.x + 14, y: point.y - 42, width: 26, height: 24)
+            let symbol = text(label, size: 14, weight: .semibold)
+            let rect = CGRect(x: point.x + 14, y: point.y - 42, width: max(26, symbol.size().width + 14), height: 24)
             context.saveGState()
             context.setShadow(offset: CGSize(width: 0, height: -1), blur: 3, color: color(0x000000, 0.25))
             context.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
@@ -456,7 +694,6 @@ enum ReadmeImages {
             context.fillPath()
             context.restoreGState()
             withAppKit {
-                let symbol = text(label, size: 14, weight: .semibold)
                 symbol.draw(at: CGPoint(x: rect.midX - symbol.size().width / 2, y: rect.midY - symbol.size().height / 2))
             }
         }

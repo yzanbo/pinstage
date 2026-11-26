@@ -794,6 +794,11 @@ final class StageController {
         case none, singleDisplay, multipleDisplays
     }
 
+    /// 見本のグループを変える（保存しない。README の画像で、グループを保存したところを見せるため。editLibrary は本物に保存してしまう）
+    func editPreviewLibrary(_ change: (inout StageLibrary) -> Void) {
+        change(&library)
+    }
+
     /// 見本のデータを入れる（ストリップの見た目を画像に描き出して確かめるため。保存はしない）
     func loadPreview(
         windows: [WindowItem],
