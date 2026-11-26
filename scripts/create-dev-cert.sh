@@ -11,6 +11,8 @@ set -euo pipefail
 NAME="Pinstage Dev"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 
+# 全角の文字のすぐ前の変数は、${NAME} と波かっこで囲む（macOS の bash 3.2 は、言語の設定が UTF-8 のとき、
+# 続く全角の文字のバイトまで変数名として読み、「NAME�: unbound variable」で止まるため）
 if security find-identity -v -p codesigning | grep -q "\"$NAME\""; then
   echo "「${NAME}」の証明書はすでにあります。"
   exit 0
