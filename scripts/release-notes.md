@@ -8,7 +8,7 @@
    - ウインドウバーの形式を「サムネイル」にしたときだけ、「画面収録」の許可も求められます（使わなければ不要です）
 4. メニューバーに Pinstage のアイコンが出て、画面の左端にウインドウバーが出ます。macOS のステージマネージャはオフにしてください（オンだと、並べたとおりになりません）
 
-新しい版に入れ替えたときは、アクセシビリティ（と画面収録）の許可を取り直す必要があります（システム設定の一覧で古い Pinstage を「−」で消してから、もう一度許可してください）。
+入れたあとは、アプリの中から新しい版に更新できます（メニューバーのアイコン →「アップデートを確認…」。自動でも確かめます）。更新のときは、手順 2 も、許可の取り直しも要りません。0.2.2 までの版から上げるときだけ、もう一度ここからダウンロードして入れ替え、アクセシビリティ（と画面収録）の許可を取り直してください（システム設定の一覧で古い Pinstage を「−」で消してから、もう一度許可します）。
 
 macOS 26 以降が必要です。Intel と Apple Silicon のどちらの Mac でも動きます。
 
@@ -16,4 +16,4 @@ macOS 26 以降が必要です。Intel と Apple Silicon のどちらの Mac で
 
 ---
 
-**English:** Requires macOS 26 or later. Download the dmg (or zip), drag `Pinstage.app` to Applications, then allow it in System Settings → Privacy & Security ("Open Anyway"), or run `xattr -dr com.apple.quarantine /Applications/Pinstage.app`. Grant Accessibility permission when asked (Screen Recording is only needed for thumbnails). The app is ad-hoc signed and not notarized, so you will need to grant the permissions again after each update. Turn off macOS Stage Manager while using Pinstage.
+**English:** Requires macOS 26 or later. Download the dmg (or zip), drag `Pinstage.app` to Applications, then allow it in System Settings → Privacy & Security ("Open Anyway"), or run `xattr -dr com.apple.quarantine /Applications/Pinstage.app`. Grant Accessibility permission when asked (Screen Recording is only needed for thumbnails). The app is signed with the author's self-signed certificate and not notarized. Once installed, it updates itself from the menu bar ("アップデートを確認…") and keeps its permissions; versions up to 0.2.2 need one more manual install and the permissions granted again. Turn off macOS Stage Manager while using Pinstage.

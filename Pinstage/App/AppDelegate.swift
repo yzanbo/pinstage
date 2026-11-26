@@ -1,4 +1,5 @@
 import AppKit
+import os
 import PinstageCore
 
 /// アプリの入口
@@ -7,6 +8,8 @@ import PinstageCore
 /// ディスプレイの端（左・右・上・下から選ぶ）にストリップを出し、そこからステージ（最前面に出すウインドウの組み合わせ）を操作する。
 @main
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let logger = Logger(pinstage: "app")
+
     private let stage = StageController()
     private let thumbnails = ThumbnailStore()
     private let shortcuts = ShortcutCenter()
@@ -17,7 +20,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var search = SearchController(stage: stage)
     private lazy var desktopPicker = DesktopPickerController(stage: stage, thumbnails: thumbnails)
     private lazy var stripAvoider = StripAvoider(stage: stage, shownStripScreens: { [weak self] in self?.strips.shownScreens ?? [] })
-    private lazy var settingsWindow = SettingsWindowController(stage: stage, thumbnails: thumbnails, shortcuts: shortcuts, editor: editor)
+    /// ログイン時に起動（設定の「一般」で切り替える。起動の記録にも状態を残す）
+    private let launchAtLogin = LaunchAtLogin()
+    /// 更新の状態（メニューバーのメニューと、設定の「一般」に出す）
+    private let updates = AppUpdates(defaults: .standard, currentBuild: Bundle.main.buildNumber)
+    /// 更新の仕組み（公開鍵の入っていないビルドでは nil。SparkleUpdater）
+    private var updater: SparkleUpdater?
+    private lazy var settingsWindow = SettingsWindowController(stage: stage, thumbnails: thumbnails, shortcuts: shortcuts, editor: editor,
+                                                               launchAtLogin: launchAtLogin, updates: updates)
     private lazy var automation = AutomationCenter(stage: stage, strips: strips, search: search)
     private var statusItem: StatusItemController?
     /// 終了の合図（killall など）を受けて、ふつうに終了する
@@ -94,10 +104,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stripAvoider.start()
         shortcuts.perform = { [weak self] action in self?.perform(action) }
         shortcuts.start()
-        statusItem = StatusItemController(stage: stage, strips: strips, shortcuts: shortcuts, actions: actions)
+        updater = SparkleUpdater.start(updates: updates)
+        statusItem = StatusItemController(stage: stage, strips: strips, shortcuts: shortcuts, actions: actions, updates: updates)
+        logLaunch()
         didFinishLaunching = true
         pendingURLs.forEach(automation.open)
         pendingURLs = []
+    }
+
+    /// 起動したことを記録に残す（更新のあと、どの版が動いているか、許可と「ログイン時に起動」が引き継がれたかを、あとから確かめられるように）
+    private func logLaunch() {
+        let version = Bundle.main.shortVersion ?? "?"
+        let build = Bundle.main.buildNumber ?? "?"
+        // 許可は、設定の「一般」と同じ値を残す（起動のときに stage・thumbnails が問い合わせたもの）
+        let accessibility = stage.isTrusted ? "許可あり" : "許可なし"
+        let screenRecording = thumbnails.hasPermission ? "許可あり" : "許可なし"
+        let loginItem = String(describing: launchAtLogin.status)
+        Self.logger.notice("起動しました: 版 \(version, privacy: .public)（ビルド \(build, privacy: .public)）、アクセシビリティ: \(accessibility, privacy: .public)、画面収録: \(screenRecording, privacy: .public)、ログイン時に起動: \(loginItem, privacy: .public)")
     }
 
     /// pinstage://… の URL で開かれた（Stream Deck・Alfred・ターミナルの open などから）

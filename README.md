@@ -61,6 +61,7 @@ Pinstage では、ウインドウバーで選んだウインドウが、その�
 - **アプリのバッジ**：未読数などの Dock のバッジを、ウインドウバーとウインドウスイッチャーにも出します。アプリ独自のバッジも出せます（[docs/BADGES.md](docs/BADGES.md)）
 - **ショートカットと自動化**：ショートカットは設定で割り当て直せます。macOS の「ショートカット」アプリや、`pinstage://` の URL からも操作できます
 - **再起動しても残す**：グループ・型・ウインドウの並び順を覚えておきます。ログイン時に起動もできます
+- **アップデート**：新しい版を 1 時間に 1 回確かめ、メニューバーのアイコンの印とメニューで知らせます（画面には割り込みません）。メニューから、そのまま更新でき、許可も取り直さずに済みます
 
 くわしい操作は [docs/USAGE.md](docs/USAGE.md)、くわしい構成は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、手で確かめる項目は [docs/TESTING.md](docs/TESTING.md) を見てください。
 
@@ -68,12 +69,14 @@ Pinstage では、ウインドウバーで選んだウインドウが、その�
 
 [Releases](https://github.com/yzanbo/pinstage/releases) から `Pinstage-<版>.dmg` をダウンロードして開き、`Pinstage` を `Applications`（アプリケーションフォルダ）へドラッグしてください（`.zip` もあります。展開して `Pinstage.app` を入れる形で、中身は同じです）。macOS 26 以降で、Intel と Apple Silicon のどちらの Mac でも動きます。
 
-Apple の公証を受けていない（アドホック署名の）アプリなので、初めて開くときに「開発元を確認できない」と止められます。次のどちらかで開けます。
+Apple の公証を受けていない（作者の自己署名の証明書で署名した）アプリなので、初めて開くときに「開発元を確認できない」と止められます。次のどちらかで開けます。
 
 - 一度開こうとしたあと、システム設定 →「プライバシーとセキュリティ」の下の方にある「このまま開く」を押す
 - ターミナルで `xattr -dr com.apple.quarantine /Applications/Pinstage.app` を実行してから開く
 
-開くと「アクセシビリティ」の許可を求められます。システム設定で Pinstage をオンにしてください（ほかのアプリのウインドウを動かす・前に出すために使います）。形式を「サムネイル」にしたときだけ、「画面収録」の許可も求められます。新しい版に入れ替えたときは、これらの許可を取り直す必要があります（一覧の古い Pinstage を「−」で消してから、もう一度許可してください）。
+開くと「アクセシビリティ」の許可を求められます。システム設定で Pinstage をオンにしてください（ほかのアプリのウインドウを動かす・前に出すために使います）。形式を「サムネイル」にしたときだけ、「画面収録」の許可も求められます。
+
+入れたあとは、アプリの中から新しい版に更新できます（メニューバーのアイコン →「アップデートを確認…」。自動でも確かめます）。更新のときは、「このまま開く」も、許可の取り直しも要りません。0.2.2 までの版にはこの機能がなく、署名のしかたも違うので、そこから上げるときだけ、もう一度ここからダウンロードして入れ替え、許可を取り直してください（一覧の古い Pinstage を「−」で消してから、もう一度許可します）。
 
 メニューバーに Pinstage のアイコンが出て（Dock には出ません）、画面の左端にウインドウバーが出ます。macOS のステージマネージャはオフにしてください（オンだと、並べたとおりになりません）。
 
@@ -98,23 +101,36 @@ make run    # ビルドして起動する
 
 `make cert` で作った証明書で署名すると、ビルドし直しても同じアプリと見なされ、アクセシビリティと画面収録の許可が外れません。証明書がないとアドホック署名になり、ビルドし直すたびに許可を取り直す必要があります（一覧の古い Pinstage を「−」で削除してから、もう一度許可してください）。
 
+初めてビルドするときに、更新の仕組み（[Sparkle](https://sparkle-project.org)）の配布物を GitHub から取り寄せて、`Vendor/Sparkle` に置きます（ネットワークが要ります。取り寄せたファイルは、決めてある SHA-256 と合うことを確かめてから使います）。
+
 | コマンド | すること |
 |---|---|
 | `make run` | Debug でビルドして起動する |
 | `make test` | PinstageCore のテストを動かす |
 | `make install` | Release でビルドして `/Applications` に入れる |
-| `make dist` | Releases に置く DMG と zip（`dist/Pinstage-<版>.dmg`・`.zip`・`.sha256`）を作る（アドホック署名） |
-| `make publish` | DMG と zip を作り、GitHub に Release（タグ `v<版>`）を作ってアップロードする。β 版は `make publish BETA=1`（タグ `v<版>-beta.1`・プレリリース）。説明は `scripts/release-changes.md`（出すたびに書き直す）と `scripts/release-notes.md` をつなげる |
+| `make dist` | Releases に置く DMG と zip（`dist/Pinstage-<版>.dmg`・`.zip`・`.sha256`）を作る（作者の証明書「Pinstage Dev」で署名。その証明書がこの Mac になければ止まる） |
+| `make publish` | DMG と zip を作り、GitHub に Release（タグ `v<版>`）を作ってアップロードする。β 版は `make publish BETA=1`（タグ `v<版>-beta.1`・プレリリース）。説明は `scripts/release-changes.md`（出すたびに書き直す）と `scripts/release-notes.md` をつなげる。zip に更新用の鍵で署名し、版の一覧（`appcast.xml`）を作り直して、コミット・プッシュまで行う（コミット済みで、GitHub の main と同じ状態からだけ動く） |
+| `make update-test` | 更新を、手元で通しで試す（別の ID の試験用アプリを、配る版と同じ証明書で 2 つの版に作り、手元のサーバーから配る。[docs/TESTING.md](docs/TESTING.md)） |
+| `make update-test-log` | 更新の試験のあいだの macOS の記録を、`build/update-test/system.log` に書き出す（許可が引き継がれたかの裏取り・うまくいかないときの手がかり） |
 | `make stop` | 動いている Pinstage を終了する |
-| `make cert` | 開発用の署名の証明書を作る |
+| `make cert` | 署名の証明書「Pinstage Dev」を作る（開発用のビルドと配る版の両方に使う） |
 | `make preview` | ウインドウバー・編集画面・検索・設定の見た目を、見本のデータで画像に描き出す（`build/preview`。本物の設定は読まない・書き換えない） |
 | `make readme-images` | README の見本の画像（`docs/images/`）を作り直す（ウインドウバー・ウインドウスイッチャーの見た目を変えたとき。見本のデータで描くので、画面には何も出ない） |
 | `make icon` | アイコンを描き直す（`scripts/make-app-icon.swift` を変えたとき） |
 
 不具合の報告や提案は [Issues](https://github.com/yzanbo/pinstage/issues) へどうぞ。
 
+## 必要な許可とプライバシー
+
+- アクセシビリティの許可を、ほかのアプリのウインドウを読む・動かす・前に出すために使います。画面収録の許可は、ウインドウバーとウインドウスイッチャーをサムネイルで表示するときだけ使い、撮った画像は保存も送信もしません
+- ネットワークに接続するのは、新しい版の確認と、その更新のダウンロードのときだけです。接続先は GitHub（版の一覧 `appcast.xml` と、Releases の更新ファイル）で、ウインドウ・グループ・使い方・Mac の情報は送りません（GitHub には、接続元の IP アドレスと、アプリの名前と版が伝わります）。自動の確認は、設定の「一般」→「新しい版を自動で確かめる」で止められます
+- 更新ファイルは、作者の鍵（EdDSA）の署名を確かめてから入れます。合わないものは入れません
+- グループと登録した型は、`~/Library/Application Support/Pinstage/library.json` に保存します
+
 ## ライセンス
 
 [PolyForm Shield License 1.0.0](LICENSE)
 
 Pinstage のソースコードは公開していますが、オープンソースのライセンスではありません。使う・改変する・配ることはできますが、Pinstage と競合する製品（または、作者が Pinstage を使って提供する製品と競合する製品）を提供するために使うことはできません。正確な条件は、[ライセンスの本文](LICENSE)（英語）を見てください。
+
+アップデートの仕組みには、[Sparkle](https://sparkle-project.org)（MIT ライセンスなど）を使っています。ライセンスの全文は [Pinstage/Licenses/Sparkle.txt](Pinstage/Licenses/Sparkle.txt) にあり、アプリにも同梱しています。

@@ -12,10 +12,12 @@
 Pinstage/
 ├── App/            起動と、アプリ全体に関わるもの
 │   ├── AppDelegate           起動・各部品のつなぎ・ショートカットの操作・終了の合図（killall）を受けて終わる
-│   ├── StatusItemController  メニューバーのアイコンとメニュー（ウインドウバーの出し入れ・出し方・新しい型・設定・終了）
+│   ├── StatusItemController  メニューバーのアイコンとメニュー（ウインドウバーの出し入れ・出し方・新しい型・設定・アップデートを確認・終了）。新しい版があるときの印も出す
 │   ├── ShortcutCenter        ショートカットの割り当て（保存・ほかの操作とぶつかったときに外す）と登録。押したキーからショートカットを作る
 │   ├── HotKey                どこからでも使えるショートカット（Carbon の RegisterEventHotKey。Pinshot・Pinshelf と同じ）
-│   ├── DockIcon              設定・型の編集を開いている間だけ Dock に出す（Pinshelf と同じ）
+│   ├── DockIcon              設定・型の編集・更新の画面を開いている間だけ Dock に出す（Pinshelf と同じ）
+│   ├── SparkleUpdater        更新（Sparkle）。新しい版を確かめる・知らせる・入れ替える。Sparkle を読み込むのは、このファイルだけ（Pinshelf と同じ）
+│   ├── AppInfo               記録（Logger の subsystem）と、版・ビルド番号の読み出し
 │   ├── AppIcon               アプリのアイコンと 1 色の印。アイコンを出すところは、すべてここから使う
 │   ├── AppActions            ウインドウバーの中身から、設定画面・型の編集画面・検索・グループの編集画面を開くつなぎ
 │   ├── KeyboardPanel         検索とウインドウ切り替えに使う、前面アプリを変えずにキー入力を受けるパネル
@@ -79,7 +81,7 @@ Pinstage/
 │   └── LayoutEditorWindowController  型の編集画面を開く役（新しい型・ステージのウインドウの並びから・登録した型を直す）
 └── Settings/       設定画面（Pinshelf と同じ、ツールバーのタブ）
     ├── SettingsWindowController  設定のウインドウ（一般・ウインドウバー・型・ショートカット・自動化）
-    ├── GeneralSettingsView       起動・ステージ（1 枚だけ出すときの大きさ）・macOS の設定（許可とステージマネージャの状態）・バージョン
+    ├── GeneralSettingsView       起動・ステージ（1 枚だけ出すときの大きさ）・macOS の設定（許可とステージマネージャの状態）・アップデート（自動で確かめるか・いますぐ確かめる・バージョン）
     ├── StripSettingsView         ウインドウバーの置き方（位置・ディスプレイ・出し方と、常に出すときの 2 項目・Dock との重なりの案内）・見た目（形式・大きさ）・並べるウインドウ・デスクトップボタン
     ├── SwitcherSettingsView      ウインドウスイッチャーの開き方（ショートカット・確定のしかた）・表示（グループ分け・見た目・大きさ）・開いているときに使えるキー
     ├── LayoutsSettingsView       登録した型の一覧（編集・名前の変更・複製・削除）と小さな見本
@@ -116,11 +118,27 @@ PinstageCore/       画面に依存しないロジック（Swift パッケージ
 ├── CaptureWindowMatcher       サムネイルを撮るため、アクセシビリティの API と画面収録の API のウインドウを結び付ける
 ├── Shortcuts                  ショートカット・割り当てられる操作・割り当て（保存と、ぶつかったときに外す）
 ├── LaunchAtLogin              ログイン時に起動（SMAppService。Pinshelf と同じ）
+├── AppUpdates                 更新の状態（使えるか・自動で確かめるか・知らせる新しい版）。更新そのものは AppUpdateService（アプリでは SparkleUpdater）が受け持つ（Pinshelf と同じ）
 ├── StageGroup                 グループとその中身（StageGroup.Content）・出すデスクトップの決まり（isShown）・保存する中身（StageLibrary）とその書き換え（足す・中身の入れ替え・名前・並べ替え・型の登録と削除）・JSON ファイルへの読み書き
 ├── ScreenCoordinates          AppKit（左下が原点）とアクセシビリティの API（左上が原点）の座標の変換
 ├── GroupNaming                グループ・型の仮の名前
 ├── AppVersion                 アプリの版の出し方（1.0.0 より前は β 版で、設定画面に「（β 版）」を付ける。Pinshot・Pinshelf と同じ）
 └── DesktopNaming              デスクトップの名前（ディスプレイごとに左から「デスクトップ 1」…。番号を持ち、名前と短い印はそこから作る）
+
+scripts/
+├── make-app-icon.swift      アプリのアイコンと 1 色の印をコードで描いて、Assets.xcassets に書き出す（make icon）
+├── create-dev-cert.sh       署名の証明書「Pinstage Dev」を作る（make cert。開発用のビルドと配る版の両方に使う）
+├── make-appcast.sh          更新ファイル（zip）に署名して、版の一覧（appcast.xml）を作る（make publish・make update-test）
+├── publish-check.sh         公開の前に、鍵と Git の状態を確かめる（make publish）
+├── update-test.sh           更新を手元で通しで試す準備をする（make update-test。update-test-key.swift は、その試験用の鍵を作る）
+├── update-test-log.sh       更新の試験のあいだの macOS の記録を書き出す（make update-test-log）
+└── release-*.md             リリースの説明（β 版の注意・この版の変更・ダウンロードと開き方。make publish がつなげる）
+
+appcast.xml         版の一覧（入れてもらったアプリが、ここを見て新しい版を知る。make publish が作り直す）
+Vendor/Sparkle/     更新の仕組み（Sparkle）の配布物。make が取り寄せるので、リポジトリには入れない
+Pinstage/Licenses/  アプリに同梱するライセンス（Sparkle.txt。make が、取り寄せた配布物から写す）
+project.yml         XcodeGen の設定（Pinstage.xcodeproj はここから作るので、リポジトリには入れない）
+Makefile            ビルド・起動・テスト・インストール・配布（README の「ソースからビルド」）
 ```
 
 ## 決まりごと
@@ -176,6 +194,35 @@ PinstageCore/       画面に依存しないロジック（Swift パッケージ
 - **1 枚だけ出すとき**：用意した型では、設定の大きさ（そのまま・縦いっぱい・ステージいっぱい）で前に出す
 - **サムネイル**：ウインドウバーに並べているウインドウだけを、3 秒ごとに撮り直す（ウインドウバーを隠している間・大きさが「小」のときは撮らない）。撮った画像は保存も送信もしない
 - **App Sandbox は使わない**：ほかのアプリのウインドウを動かすため（アクセシビリティの API はサンドボックスの中では使えない）
+
+## 署名と更新
+
+Developer ID に登録しない前提で、[Sparkle](https://sparkle-project.org) 2 を使う（Pinshelf と同じ仕組み）。Pinshelf と違うのは、配る版を、決まった自己署名の証明書で署名すること。検討の経緯と根拠は、Pinshelf のノート「更新の仕組みの方針」にまとめてある。
+
+- **配る版の署名**：`make dist` は、自己署名の証明書「Pinstage Dev」（`make cert` で作るもの。`Makefile` の `CERT_NAME`）で署名し、DMG と zip を作る前に、できたアプリの指定要件の `certificate leaf` が、作者の証明書の SHA-1（`Makefile` の `DIST_CERT_SHA1`）と同じかを確かめる。署名に使う前にも、その証明書がキーチェーンにあるかを SHA-1 で確かめる（名前では確かめない。作り直した証明書は、名前が同じでも別物のため）。macOS は、アクセシビリティ・画面収録の許可を、アプリの ID と署名の条件（指定要件。`identifier "app.pinstage.Pinstage" and certificate leaf = H"…"`）の組で覚える。アドホック署名だと条件が版ごとに変わり、更新のたびに許可を取り直すことになるが、同じ証明書で署名すれば条件が変わらず、許可が引き継がれる。Apple の確認ではないので、初めて開くときの「このまま開く」は残る
+- **証明書の扱い**：作り直すと別の証明書になり、入れてもらったアプリの許可が外れる（1 回だけ別のアプリ扱いになる）。`make cert` は最初の 1 回だけにし、控え（キーチェーンアクセスで書き出した .p12）を Mac の外に保管する。別の Mac で配る版を作るときは、控えを取り込む。有効期限は作ってから 10 年（切れる前に、Developer ID に移るか作り直すかを決める。替えるときは、`DIST_CERT_SHA1` も新しい証明書の値にする）。開発用のビルド（`make run`・`make install`）も同じ証明書で署名するので、手元で入れたアプリと配る版は、同じアプリとして扱われる
+- **取り込み方**：公式の配布物（`Sparkle.framework` と道具）を `make` が取り寄せ、決めてある SHA-256 と合うことを確かめて `Vendor/Sparkle` に置く。Sparkle の版を上げるときは、`Makefile` の `SPARKLE_VERSION` と `SPARKLE_SHA256` を一緒に変える（Pinshelf とそろえる）
+- **本物かの確かめ**：更新ファイル（zip）は、作者の EdDSA の鍵で署名する。アプリには公開鍵（`SUPublicEDKey`）を入れ、Sparkle が署名を確かめてから入れ替える。鍵は Pin シリーズで共通（Pinshelf の `make update-key` で作ったもの）なので、Pinstage には鍵を作る道具を置かない（作り直すと、共通の鍵を上書きしてしまうため）。公開鍵の入っていないビルドでは、更新の機能を出さない（`SparkleUpdater.start` が nil を返す）
+- **「このまま開く」が要らない理由**：Sparkle が自分でダウンロードして確かめた版からは、ダウンロードのしるし（quarantine）を外す。だから、更新で入れた版は Gatekeeper に止められない
+- **サンドボックスなし**：Pinstage はサンドボックスを使わないので、入れ替えは Sparkle の中の部品（Autoupdate）がそのまま行う。Pinshelf のような、入れ替え役の XPC サービス（`SUEnableInstallerLauncherService`）・通信の許可（`network.client`・`mach-lookup`）は要らない
+- **ライブラリの検証**：Team ID のない署名（自己署名の証明書・アドホック署名）では、Hardened Runtime のままだと、埋め込んだ Sparkle の読み込みを断られる。`cs.disable-library-validation` で検証を切っている（Pinshelf と同じ。切らないと、起動で落ちる）。配る版には、デバッガをつなぐための許可（`get-task-allow`）を入れない（`CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO`）
+- **知らせ方**：メニューバーに常駐するアプリなので、自動で見つけた新しい版は画面に割り込ませず、アイコンの印とメニューで知らせる（Sparkle の「控えめな知らせ」の作法）。メニューから選ぶと、Sparkle の更新の画面が前面に出る。更新の画面は開け閉めを自分では知れないので、確かめ始めてから確かめ終えるまで、名前付きの印で Dock に出しておく（`DockIcon.hold`・`release`）
+- **確かめる間隔**：1 時間に 1 回（`SUScheduledCheckInterval` 3600。Sparkle が受け付けるいちばん短い間隔で、VS Code と同じ）。起動したときは、前に確かめてから 1 時間以上たっていれば、すぐ確かめる。版の一覧は小さな XML 1 つなので、1 時間ごとでも GitHub への負担は小さい
+- **印の形**：1 色の印の右下を丸く切り抜き、下向きの矢印を抜いた丸を置いたアイコンに替える（`AppIcon.symbolWithUpdateBadge`。Ollama と同じ考え方で、Pinshelf と同じ形・大きさ）。テンプレート画像のままにして、色は付けない（メニューバーのアプリの印は 1 色が一般的で、色付きの点はマイク・カメラの使用中の印と紛れやすい）。切り抜くのは右のウインドウの下半分で、左のストリップ・左のウインドウ・ピンは残る
+- **印を消すとき**：印は「まだ入れていない新しい版がある」の意味で、入れるか飛ばすまで出しておく（Pin シリーズ共通の仕様。ノート「更新の仕組みの方針」の 8 の節）。Sparkle の説明書は「画面を見てもらったら印を消す」作り（`standardUserDriverDidReceiveUserAttention`）を勧めるが、それだと更新の画面を開いて「あとで通知」で閉じただけで消え、次に自動で確かめるまで戻らないので使わない。見つけた版とビルド番号を `UserDefaults` に保存し（`AppUpdates`）、起動したときに今の版より新しければ印を戻す（終了しても消えないように）。消すのは、利用者が「このバージョンはスキップ」を選んだとき（`updater(_:userDidMake:forUpdate:state:)` の `.skip`）・確かめ直して新しい版がなかったとき（`updaterDidNotFindUpdate`。通信の失敗では呼ばれない）・入れて今の版が同じか新しくなったとき
+- **確認中の小窓の長さ**：「アップデートを確認中…」の小窓が一瞬で閉じてちらついて見えないよう、Sparkle の標準の画面を `PacedUserDriver` で包み、小窓を少なくとも 0.5 秒は出してから結果の画面に渡す（Pinshelf と同じ）
+- **版の一覧**：`appcast.xml` をリポジトリの main に置き、アプリは `raw.githubusercontent.com` から読む（β 版は GitHub の「最新の版」に出ないので、Releases の latest は使えない）。載せるのは、いちばん新しい版だけ。この版の変更（`scripts/release-changes.md`）を、Markdown のまま埋め込む
+- **版の比べ方**：Sparkle は `CFBundleVersion`（ビルド番号）で新旧を比べる。出すたびに必ず上げる
+- **記録**：起動のたびに、版・アクセシビリティと画面収録の許可・「ログイン時に起動」の状態を、macOS の記録に 1 行残す（`AppDelegate.logLaunch`）。入れ替えのあとに許可が引き継がれたかを、あとから確かめられる（`make update-test-log`）
+- **ライセンス**：Sparkle のライセンス（MIT など）は、配るものに全文を含める決まり。`Pinstage/Licenses/Sparkle.txt` として同梱する
+
+### 版とリリース
+
+- 1.0.0 より前は β 版。出すたびに、版とビルド番号（`project.yml`）を上げ、`scripts/release-changes.md`（この版の変更）を書き直す
+- `make publish BETA=1` で β 版としてプレリリースにする（タグは `v<版>-beta.1`）。正式版は `BETA` を付けずに `make publish`
+- `make publish` は、先に、鍵がそろっているか・コミット済みで GitHub の main と同じか・その版をまだ出していないか（`scripts/publish-check.sh`）と、配る版に署名する証明書があるかを確かめ、そろっていなければ何も作らずに止まる。そのあと、DMG と zip を作り、zip に署名して版の一覧を `dist/appcast.xml` に作る。Release を作れたら `appcast.xml` に写し、それだけをコミットしてプッシュする（Release を作れずに止まっても、リポジトリの `appcast.xml` は書き換わらない）
+- 更新ファイルの署名の秘密鍵（EdDSA）は、この Mac のログインキーチェーンにある（Pinshelf と共通）。別の Mac で公開するときは、控えを `Vendor/Sparkle/bin/generate_keys -f <控えのファイル>` で取り込む。失くすと更新を届けられなくなるので、控え（`generate_keys -x`）を安全な場所に保管する
+- リリースの前と、更新まわり（Sparkle の版・署名・許可）を変えたときは、`make update-test` で入れ替えを通しで試す（[TESTING.md](TESTING.md) の「更新を通しで試す」）
 
 ## 割り切っていること
 

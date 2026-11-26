@@ -107,7 +107,7 @@ final class StageController {
     @ObservationIgnored private var lastFocus: (pid: pid_t, window: AXUIElement?)?
     /// 起動して初めてウインドウを読んだときに、覚えた並び順に並べ直したか
     @ObservationIgnored private var restoredWindowOrder = false
-    @ObservationIgnored private let log = Logger(subsystem: "app.pinstage.Pinstage", category: "Stage")
+    @ObservationIgnored private let log = Logger(pinstage: "Stage")
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults

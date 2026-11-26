@@ -20,17 +20,21 @@ final class SettingsWindowController {
     private let thumbnails: ThumbnailStore
     private let shortcuts: ShortcutCenter
     private let editor: LayoutEditorWindowController
-    private let launchAtLogin = LaunchAtLogin()
+    private let launchAtLogin: LaunchAtLogin
+    private let updates: AppUpdates
     private lazy var recorder = ShortcutRecorderModel(shortcuts: shortcuts)
     private var window: NSWindow?
     private var tabs: NSTabViewController?
     private var closeObserver: NSObjectProtocol?
 
-    init(stage: StageController, thumbnails: ThumbnailStore, shortcuts: ShortcutCenter, editor: LayoutEditorWindowController) {
+    init(stage: StageController, thumbnails: ThumbnailStore, shortcuts: ShortcutCenter, editor: LayoutEditorWindowController,
+         launchAtLogin: LaunchAtLogin, updates: AppUpdates) {
         self.stage = stage
         self.thumbnails = thumbnails
         self.shortcuts = shortcuts
         self.editor = editor
+        self.launchAtLogin = launchAtLogin
+        self.updates = updates
     }
 
     func show(tab: SettingsTab? = nil) {
@@ -44,7 +48,8 @@ final class SettingsWindowController {
     private func makeWindow() -> NSWindow {
         let tabs = SettingsTabViewController()
         tabs.tabStyle = .toolbar
-        tabs.addTabViewItem(makeTab("一般", symbol: "gearshape", view: GeneralSettingsView(stage: stage, thumbnails: thumbnails, launchAtLogin: launchAtLogin)))
+        let general = GeneralSettingsView(stage: stage, thumbnails: thumbnails, launchAtLogin: launchAtLogin, updates: updates)
+        tabs.addTabViewItem(makeTab("一般", symbol: "gearshape", view: general))
         tabs.addTabViewItem(makeTab("ウインドウバー", symbol: "sidebar.left", view: StripSettingsView(stage: stage, thumbnails: thumbnails)))
         tabs.addTabViewItem(makeTab(WindowSwitcherSettings.title, symbol: "square.grid.3x2",
                                     view: SwitcherSettingsView(stage: stage, thumbnails: thumbnails, shortcuts: shortcuts, recorder: recorder)))

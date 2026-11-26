@@ -166,7 +166,16 @@ enum StripPreview {
                     .frame(width: 560, height: 360)
                 write(view, size: CGSize(width: 560, height: 360), to: url)
             case .general:
-                write(GeneralSettingsView(stage: stage, thumbnails: ThumbnailStore(), launchAtLogin: LaunchAtLogin()), size: nil, to: url)
+                // アップデートの欄は、公開鍵の入った配る版と同じ見た目で描く（本物の更新の仕組みは動かさない。
+                // AppUpdates は、つないだときに状態を写し取るので、見本の受け持つものを持ち続けなくてよい）。
+                // 見つけた新しい版の覚え書きは、本物の設定に触れないよう、使い捨ての保存場所に置き、描き終えたら消す
+                let suite = "app.pinstage.Pinstage.preview"
+                guard let defaults = UserDefaults(suiteName: suite) else { return }
+                let updates = AppUpdates(defaults: defaults, currentBuild: nil)
+                updates.attach(PreviewUpdateService())
+                write(GeneralSettingsView(stage: stage, thumbnails: ThumbnailStore(), launchAtLogin: LaunchAtLogin(), updates: updates),
+                      size: nil, to: url)
+                defaults.removePersistentDomain(forName: suite)
             case .strip:
                 write(StripSettingsView(stage: stage, thumbnails: ThumbnailStore()), size: nil, to: url)
             case .switcher:
@@ -272,5 +281,14 @@ enum StripPreview {
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
         return bitmap
     }
+}
+
+/// 見本の設定画面に使う、更新を受け持つもの（何もしない。アップデートの欄を、配る版と同じ見た目で描くため）
+private final class PreviewUpdateService: AppUpdateService {
+    var checksAutomatically = true
+    var canCheck = true
+    var lastCheckDate: Date? = Date(timeIntervalSince1970: 1_795_000_000)
+
+    func checkForUpdates() {}
 }
 #endif
