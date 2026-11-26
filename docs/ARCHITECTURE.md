@@ -20,7 +20,8 @@ Pinstage/
 │   ├── AppActions            ウインドウバーの中身から、設定画面・型の編集画面・検索・グループの編集画面を開くつなぎ
 │   ├── KeyboardPanel         検索とウインドウ切り替えに使う、前面アプリを変えずにキー入力を受けるパネル
 │   ├── EditorWindow          編集画面（グループ・型）のウインドウと、下の行（キャンセル・保存）
-│   └── TextPrompt            グループ・型の名前を入力してもらうダイアログ
+│   ├── TextPrompt            グループ・型の名前を入力してもらうダイアログ
+│   └── ReadmeImages          開発用: README の見本の画像を作る（make readme-images）。ウインドウバー・ウインドウスイッチャーは StripPreview の見本のデータで描き、架空のデスクトップに並べる
 ├── Windows/        ほかのアプリのウインドウ
 │   ├── AXWindow              アクセシビリティの API でウインドウを読む・動かす・前に出す。許可の確認
 │   ├── WindowCatalog         いま開いているウインドウを集める（ふつうのウインドウだけ。決まりは PinstageCore の WindowEligibility）。ディスプレイの UUID・動いているアプリの識別名などの小さな道具
