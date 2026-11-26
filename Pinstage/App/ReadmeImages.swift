@@ -19,6 +19,8 @@ import UniformTypeIdentifiers
 enum ReadmeImages {
     /// 2 倍の画素で描く（PNG はそのまま、GIF は 1 倍にして軽くする）
     private static let scale: CGFloat = 2
+    /// 画像の大きさ（README に並べるので、どれも同じにする。ウインドウスイッチャーが収まる幅と、グループが 3 つ並んでもウインドウの一覧が隠れない高さ）
+    private static let imageSize = CGSize(width: 980, height: 700)
 
     static func render(to folder: URL) {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -138,7 +140,7 @@ enum ReadmeImages {
         // MARK: hero.png
 
         func hero() throws -> CGImage {
-            let canvas = Canvas(size: CGSize(width: 900, height: 600), scale: ReadmeImages.scale)
+            let canvas = Canvas(size: ReadmeImages.imageSize, scale: ReadmeImages.scale)
             let desk = desk(canvas.size)
             let shot = try strip(selection: [safari, finder], on: desk)
             paint(canvas, strip: shot, windows: placed([safari, finder], on: desk))
@@ -150,7 +152,7 @@ enum ReadmeImages {
         // MARK: arrange.gif
 
         func arrange() throws -> [GIFFrame] {
-            let desk = desk(CGSize(width: 760, height: 560))
+            let desk = desk(ReadmeImages.imageSize)
             let none = try strip(selection: [], on: desk)
             let one = try strip(selection: [safari], on: desk)
             let two = try strip(selection: [safari, finder], on: desk)
@@ -180,7 +182,7 @@ enum ReadmeImages {
         // MARK: groups.gif
 
         func groups() throws -> [GIFFrame] {
-            let desk = desk(CGSize(width: 760, height: 700))
+            let desk = desk(ReadmeImages.imageSize)
             let pair = [safari, finder]
             let develop = sample.groups[0]
             let before = try strip(selection: pair, on: desk)
@@ -236,7 +238,7 @@ enum ReadmeImages {
         // MARK: switcher.gif
 
         func switcher() throws -> [GIFFrame] {
-            let desk = desk(CGSize(width: 980, height: 700))
+            let desk = desk(ReadmeImages.imageSize)
             let pair = [safari, finder]
             let before = try strip(selection: pair, on: desk)
             sample.stage.windowSwitcherSettings.appearance = .icons
