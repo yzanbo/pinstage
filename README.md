@@ -15,7 +15,7 @@
 </p>
 
 > [!NOTE]
-> **いまは β 版（0.1.0）です。** 思わぬ不具合があるかもしれません。見つけたら [Issues](https://github.com/yzanbo/pinstage/issues) で教えてください。操作や設定の保存形式は、正式版までに変わることがあります。
+> **いまは β 版です**（最新の版は [Releases](https://github.com/yzanbo/pinstage/releases) を見てください）。思わぬ不具合があるかもしれません。見つけたら [Issues](https://github.com/yzanbo/pinstage/issues) で教えてください。操作や設定の保存形式は、正式版までに変わることがあります。
 
 > **English:** Pinstage is a macOS menu bar app that lets you pick just the windows you want to see and tile them in front, without first sorting them into groups. A window bar on any edge of the screen lists your windows; click, ⌘-click, or drag them out to bring them to the front and arrange them side by side. Save combinations as groups and recall them later. The UI is currently in Japanese.
 
