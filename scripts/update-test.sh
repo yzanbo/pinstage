@@ -2,7 +2,7 @@
 # 更新を、手元で通しで試す準備をする（make update-test。手順は docs/TESTING.md の「更新を通しで試す」。Pinshelf と同じ作り）。
 #
 # ふだんの Pinstage とは別の ID・別の名前（PinstageUpdateTest）の試験用アプリを、古い版と新しい版の 2 つ作り、
-# 新しい版を手元のサーバー（http://localhost:8765）から配る。古い版を開くと、Sparkle が新しい版を見つけて入れ替える。
+# 新しい版を手元のサーバー（http://localhost:8767）から配る。古い版を開くと、Sparkle が新しい版を見つけて入れ替える。
 # いちばん確かめたいのは、入れ替えたあとも、アクセシビリティ（と画面収録）の許可が外れないこと。
 #
 # 古い版の開き方は 2 通り:
@@ -20,12 +20,14 @@
 #     その証明書がこの Mac にあるかも、make の側で確かめる）。
 #     - を渡すとアドホック署名にし、ID と名前の後ろに AdHoc を付ける（macOS は、許可をアプリの ID と署名の組で覚えるので、
 #     署名のやり方ごとに試験用アプリを分ける。アドホック署名では、入れ替えると許可が外れるのが正しい動き）
+#   環境変数 UPDATE_TEST_PORT: 手元のサーバーのポート（make update-test が渡す。既定は 8767。Pin シリーズの試験どうしでぶつからないよう、
+#     アプリごとに分けている: Pinshelf 8765・Pinshot 8766・Pinstage 8767）
 #   環境変数 NO_SERVER=1: アプリと版の一覧を作るだけで、サーバーは動かさない
 #
 # 変数のすぐ後ろに全角の文字を続けるときは、${NAME} と波かっこで囲む（create-dev-cert.sh と同じ理由）。
 set -euo pipefail
 
-PORT=8765
+PORT="${UPDATE_TEST_PORT:?make update-test から流してください（手元のサーバーのポートを渡します）}"
 SIGN_IDENTITY="${SIGN_IDENTITY:?make update-test から流してください（署名に使う証明書の名前を渡します）}"
 if [ "${SIGN_IDENTITY}" = "-" ]; then
   SUFFIX="AdHoc"
@@ -54,6 +56,27 @@ for id in app.pinstage.UpdateTest app.pinstage.UpdateTestAdHoc; do
     exit 1
   fi
 done
+
+# サーバーを動かせるか（ポートが空いているか）を、ビルドの前に確かめる（ビルドには数分かかるので、作り終えてから止まらないように。Pinshot と同じ）。
+# サーバーと同じく 127.0.0.1 のそのポートで受け口を開いてみて、開けなければ止める
+check_port() {
+  python3 - "$1" <<'PY'
+import socket, sys
+sock = socket.socket()
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try:
+    sock.bind(("127.0.0.1", int(sys.argv[1])))
+except OSError as error:
+    sys.exit(error.strerror)
+PY
+}
+if [ "${NO_SERVER:-}" != "1" ] && ! PORT_ERROR="$(check_port "${PORT}" 2>&1)"; then
+  echo "手元のサーバーを、ポート ${PORT} で動かせません（${PORT_ERROR}）。" >&2
+  echo "Address already in use なら、ほかのものがそのポートを使っています（前に流した試験のサーバーが、別のターミナルで動いたままのことが多い）。" >&2
+  echo "何が使っているかは、別のターミナルで  lsof -nP -iTCP:${PORT} -sTCP:LISTEN  を流すと分かります。" >&2
+  echo "それを止めてから流し直すか、make update-test UPDATE_TEST_PORT=8800 のように、空いているポートを渡してください。" >&2
+  exit 1
+fi
 
 # プロジェクトが「書類」などの中にあると、手元でビルドした古い版を入れ替えるときに、macOS がそのフォルダへのアクセスを確かめる
 # （入れ替えの部品が、そのフォルダの中のアプリを書き換えるため。配る版はアプリケーションフォルダに置くので、出ない）

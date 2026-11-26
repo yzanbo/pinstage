@@ -143,11 +143,14 @@ publish-check: $(SPARKLE_STAMP)
 
 # 更新を、手元で通しで試す（docs/TESTING.md の「更新を通しで試す」）。
 # ふだんの Pinstage とは別の ID の試験用アプリを、配る版と同じ証明書で 2 つの版に作り、新しい版を手元のサーバーから配る（止めるときは control + C）。
-# アドホック署名どうしで比べたいときは、make update-test SIGN_IDENTITY=- のように渡す
+# アドホック署名どうしで比べたいときは、make update-test SIGN_IDENTITY=- のように渡す。
+# 手元のサーバーのポートは、Pin シリーズの試験どうしでぶつからないよう、アプリごとに分ける（Pinshelf 8765・Pinshot 8766・Pinstage 8767）。
+# ほかで使っているときは make update-test UPDATE_TEST_PORT=8800 のように替える
+UPDATE_TEST_PORT ?= 8767
 update-test: SIGN_IDENTITY = $(CERT_NAME)
 update-test: generate
 	@if [ "$(SIGN_IDENTITY)" = "$(CERT_NAME)" ]; then $(require_dist_cert); fi
-	SIGN_IDENTITY="$(SIGN_IDENTITY)" ./scripts/update-test.sh $(XCODEBUILD_FLAGS)
+	SIGN_IDENTITY="$(SIGN_IDENTITY)" UPDATE_TEST_PORT="$(UPDATE_TEST_PORT)" ./scripts/update-test.sh $(XCODEBUILD_FLAGS)
 
 # 更新の試験のあいだの macOS の記録を、build/update-test/system.log に書き出す
 # （許可が引き継がれたか・確認の画面が出たかの裏取りと、うまくいかないときの手がかりに使う）。
