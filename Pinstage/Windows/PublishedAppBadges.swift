@@ -3,19 +3,26 @@ import Darwin
 import Foundation
 import PinstageCore
 
-/// 連携を有効にしたアプリのバッジだけを、同じ利用者のローカルファイルから読む。
+/// アプリが置き場に書いたバッジを、同じ利用者のローカルファイルから読む。
+/// 相手のアプリは名指ししない。置き場にある `<バンドル ID>.json` を全部候補にし、
+/// そのアプリが起動中で、中身がその起動と合うものだけを使う（形式は docs/BADGES.md）。
 enum PublishedAppBadges {
-    private static let sources = ["com.example.app"]
-
     static func read() -> [String: [AppIconBadge]] {
         guard let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return [:] }
         let directory = support.appendingPathComponent("Pinstage/BadgeSources", isDirectory: true)
         let now = Date()
         var badges: [String: [AppIconBadge]] = [:]
-        for bundleID in sources {
+        for bundleID in sources(in: directory) {
             badges[bundleID] = read(bundleID: bundleID, in: directory, now: now)
         }
         return badges
+    }
+
+    /// 置き場にあるファイルから、読む候補のバンドル ID を集める（名前順に、上限まで）
+    private static func sources(in directory: URL) -> [String] {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return [] }
+        return Array(names.compactMap(AppBadgeSnapshot.bundleID(fromFileName:)).sorted()
+            .prefix(AppBadgeSnapshot.maximumSources))
     }
 
     private static func read(bundleID: String, in directory: URL, now: Date) -> [AppIconBadge]? {

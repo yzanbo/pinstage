@@ -52,6 +52,20 @@ struct AppIconBadgeTests {
         #expect(decode(Data(repeating: 0x20, count: AppBadgeSnapshot.maximumBytes + 1)) == nil)
     }
 
+    @Test("置き場のファイル名からバンドルIDを取り出し、隠しファイル・書きかけ・パスになる名前は読まない")
+    func bundleIDFromFileName() {
+        #expect(AppBadgeSnapshot.bundleID(fromFileName: "dev.example.app.json") == "dev.example.app")
+        #expect(AppBadgeSnapshot.bundleID(fromFileName: "com.example.My-App_2.json") == "com.example.My-App_2")
+        #expect(AppBadgeSnapshot.bundleID(fromFileName: ".json") == nil)
+        #expect(AppBadgeSnapshot.bundleID(fromFileName: ".dev.example.app.json") == nil)
+        #expect(AppBadgeSnapshot.bundleID(fromFileName: "..json") == nil)
+        #expect(AppBadgeSnapshot.bundleID(fromFileName: "dev.example.app.json.tmp") == nil)
+        #expect(AppBadgeSnapshot.bundleID(fromFileName: "dev.example.app") == nil)
+        #expect(AppBadgeSnapshot.bundleID(fromFileName: "a/b.json") == nil)
+        #expect(AppBadgeSnapshot.bundleID(fromFileName: "アプリ.json") == nil)
+        #expect(AppBadgeSnapshot.bundleID(fromFileName: String(repeating: "a", count: 256) + ".json") == nil)
+    }
+
     @Test("連携があれば0件を含めて優先。未連携アプリは引き続き標準Dockバッジ")
     func mergesWithoutDuplicates() throws {
         let empty = try #require(decode(fixture(#"{"corner":"topRight","count":0,"label":"未読"}"#)))

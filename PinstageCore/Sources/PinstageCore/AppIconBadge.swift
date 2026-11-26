@@ -32,8 +32,30 @@ public struct AppIconBadge: Equatable, Identifiable, Sendable {
 }
 
 /// アプリが件数を公開する、小さな JSON の形式。アプリの状態名と表示位置は公開元が決める。
+/// 形式は docs/BADGES.md に公開している（対応したいアプリはこれに合わせて書く）。
 public enum AppBadgeSnapshot {
     public static let maximumBytes = 8192
+    /// 一度に読むファイルの数の上限（置き場にファイルが溜まっても、読み直しが重くならないように）
+    public static let maximumSources = 32
+
+    /// 置き場のファイル名（`<バンドル ID>.json`）からバンドル ID を取り出す。
+    /// 相手のアプリは名指しせず、置き場にあるファイルを全部候補にする。
+    /// バンドル ID に使える文字（英数字・`.`・`-`・`_`）だけを通し、隠しファイルや書きかけのファイルは読まない。
+    public static func bundleID(fromFileName name: String) -> String? {
+        let suffix = ".json"
+        guard name.hasSuffix(suffix) else { return nil }
+        let bundleID = String(name.dropLast(suffix.count))
+        guard (1...255).contains(bundleID.utf8.count), bundleID.first != ".",
+              bundleID.utf8.allSatisfy(isBundleIDCharacter) else { return nil }
+        return bundleID
+    }
+
+    private static func isBundleIDCharacter(_ byte: UInt8) -> Bool {
+        switch byte {
+        case 0x30...0x39, 0x41...0x5A, 0x61...0x7A, 0x2D, 0x2E, 0x5F: true
+        default: false
+        }
+    }
 
     private struct Payload: Decodable {
         struct Entry: Decodable {
