@@ -30,7 +30,7 @@ SWIFT_TEST_FLAGS ?=
 XCODEBUILD := xcodebuild -project Pinstage.xcodeproj -scheme Pinstage -sdk macosx \
 	-derivedDataPath $(DERIVED_DATA) CODE_SIGN_IDENTITY="$(SIGN_IDENTITY)" $(XCODEBUILD_FLAGS)
 
-.PHONY: generate build release dist publish run stop install uninstall test clean cert icon preview
+.PHONY: generate build release dist publish run stop install uninstall test clean cert icon preview readme-images
 
 # アイコンを描くスクリプトをビルドする場所
 ICON_TOOL_DIR := $(DERIVED_DATA)/icon-tool
@@ -131,6 +131,11 @@ preview: build
 	done
 	@"$(APP)/Contents/MacOS/Pinstage" --render-strip-preview "build/preview/strip-desktopDisplayGroups.png" grid 230 desktopDisplayGroups >/dev/null 2>&1
 	@echo "build/preview に書き出しました"
+
+# README の見本の画像を作り直す（見た目を変えたとき。docs/images に書き出す。Pinshelf・Pinshot と同じ考え方）。
+# ウインドウバーとウインドウスイッチャーは、make preview と同じく、開発用のビルドで見本のデータを描く（画面には出さない）
+readme-images: build
+	"$(APP)/Contents/MacOS/Pinstage" --render-readme-images docs/images
 
 # アプリのアイコンを描き直す（scripts/make-app-icon.swift を変えたとき。Pinstage/Assets.xcassets に書き出す）
 icon:

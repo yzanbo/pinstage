@@ -71,8 +71,8 @@ enum StripPreview {
     /// 見本のための設定の置き場（本物の設定を読まない・書き換えない）
     private static let defaultsSuite = "app.pinstage.Pinstage.preview"
 
-    /// 見本のデータを入れた本体
-    private struct Sample {
+    /// 見本のデータを入れた本体（README の画像を作るときにも使う）
+    struct Sample {
         let stage: StageController
         let windows: [WindowItem]
         let groups: [StageGroup]
@@ -183,7 +183,7 @@ enum StripPreview {
     }
 
     /// 見本のデータを入れた本体を作って、描く（本物の設定は読まない・書き換えない）
-    private static func withSample(scenario: Scenario, customLayouts: [CustomLayout] = [], _ body: (Sample) -> Void) {
+    static func withSample(scenario: Scenario, customLayouts: [CustomLayout] = [], _ body: (Sample) -> Void) {
         guard let screen = NSScreen.primary ?? NSScreen.screens.first,
               let defaults = UserDefaults(suiteName: defaultsSuite)
         else { return }
@@ -246,21 +246,31 @@ enum StripPreview {
         body(Sample(stage: stage, windows: windows, groups: groups, screen: screen))
     }
 
-    /// 画面の外に置いたウインドウで描いて、PNG に書き出す（size が nil なら、中身に合う大きさ）。
-    /// スクロールする欄の中身も描かれるよう、実際の画面と同じ部品で描く
+    /// 画面の外に置いたウインドウで描いて、PNG に書き出す（size が nil なら、中身に合う大きさ）
     private static func write(_ view: some View, size: CGSize?, to url: URL) {
+        try? snapshot(view, size: size)?.representation(using: .png, properties: [:])?.write(to: url)
+    }
+
+    /// 画面の外に置いたウインドウで描き写す（size が nil なら、中身に合う大きさ。画素は画面の倍率）。
+    /// スクロールする欄の中身も描かれるよう、実際の画面と同じ部品で描く。transparent なら、ウインドウの地を描かない（ほかの絵に重ねるとき）
+    static func snapshot(_ view: some View, size: CGSize?, appearance: NSAppearance.Name = .darkAqua, transparent: Bool = false) -> NSBitmapImageRep? {
         let hosting = NSHostingView(rootView: view)
         let size = size ?? hosting.fittingSize
         hosting.frame = CGRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: size.width, height: size.height), styleMask: .borderless, backing: .buffered, defer: false)
-        window.appearance = NSAppearance(named: .darkAqua)
+        window.appearance = NSAppearance(named: appearance)
+        if transparent {
+            window.isOpaque = false
+            window.backgroundColor = .clear
+        }
         window.contentView = hosting
         window.orderFrontRegardless()
         hosting.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
-        guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return }
+        defer { window.orderOut(nil) }
+        guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return nil }
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
-        try? bitmap.representation(using: .png, properties: [:])?.write(to: url)
+        return bitmap
     }
 }
 #endif

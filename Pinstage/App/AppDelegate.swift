@@ -49,6 +49,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             StripPreview.render(screen, to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
             exit(0)
         }
+        // 開発用: README に載せる見本の画像を作って終わる（--render-readme-images 書き出すフォルダ）
+        if let index = CommandLine.arguments.firstIndex(of: "--render-readme-images"), CommandLine.arguments.count > index + 1 {
+            _ = NSApplication.shared
+            ReadmeImages.render(to: URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true))
+            exit(0)
+        }
         #endif
         let app = NSApplication.shared
         let delegate = AppDelegate()
