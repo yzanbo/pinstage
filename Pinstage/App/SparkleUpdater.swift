@@ -10,6 +10,7 @@ import Sparkle
 /// （問い合わせはすぐ終わるので、そのままだと小窓が一瞬で閉じ、ちらついて見えるため。`PacedUserDriver`）。
 /// Pinstage はメニューバーに常駐するアプリなので、自動で見つけた新しい版は画面に割り込ませず、
 /// メニューバーのアイコンの印とメニューで知らせる（Sparkle の「控えめな知らせ」の作法）。
+/// 印は、入れるか利用者がその版を飛ばすまで出しておく（更新の画面を開いた・閉じただけでは消さない。`AppUpdates`。Pinshelf と同じ）。
 ///
 /// Pinstage はサンドボックスを使わないので、入れ替えは Sparkle の中の部品（Autoupdate）がそのまま行う
 /// （Pinshelf のような、サンドボックス用の入れ替え役・通信の許可は要らない）。
@@ -101,6 +102,30 @@ final class SparkleUpdater: NSObject, AppUpdateService, SPUUpdaterDelegate, SPUS
         updates.refresh()
     }
 
+    /// 確かめたら、新しい版がなかった（知らせていた版を取り下げた・利用者が飛ばした版だけだったときも）。印を消す
+    /// （通信の失敗では呼ばれないので、つながらないときは印を残す）
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+        updates.clearPendingUpdate()
+    }
+
+    /// 更新の画面で選んだ。「このバージョンをスキップ」のときだけ印を消す
+    /// （「あとで通知」・閉じたときは、まだ入れていないので残す。入れたときは、新しい版で開き直したときに AppUpdates が消す）
+    func updater(_ updater: SPUUpdater, userDidMake choice: SPUUserUpdateChoice, forUpdate updateItem: SUAppcastItem, state: SPUUserUpdateState) {
+        Self.logger.notice("User choice for version \(updateItem.displayVersionString, privacy: .public): \(Self.describe(choice), privacy: .public)")
+        if choice == .skip {
+            updates.clearPendingUpdate()
+        }
+    }
+
+    private static func describe(_ choice: SPUUserUpdateChoice) -> String {
+        switch choice {
+        case .skip: "skip"
+        case .install: "install"
+        case .dismiss: "dismiss"
+        @unknown default: "unknown"
+        }
+    }
+
     // MARK: - SPUStandardUserDriverDelegate（控えめな知らせ）
 
     var supportsGentleScheduledUpdateReminders: Bool { true }
@@ -117,18 +142,12 @@ final class SparkleUpdater: NSObject, AppUpdateService, SPUUpdaterDelegate, SPUS
         if handleShowingUpdate {
             // Sparkle が更新の画面を出す（メニューから確かめたとき）。出している間は Dock に出す
             DockIcon.hold(Self.dockHold)
-        } else {
-            updates.noteUpdateFound(version: update.displayVersionString)
         }
-    }
-
-    /// 更新の画面を見てもらった（入れる・あとにする・この版を飛ばすを選んだときも）
-    func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
-        updates.clearPendingUpdate()
+        // どちらの見つけ方でも、入れるか飛ばすまで印を出しておく（メニューから確かめて「あとで通知」を選んだときも残すため）
+        updates.noteUpdateFound(version: update.displayVersionString, build: update.versionString)
     }
 
     func standardUserDriverWillFinishUpdateSession() {
-        updates.clearPendingUpdate()
         DockIcon.release(Self.dockHold)
     }
 }

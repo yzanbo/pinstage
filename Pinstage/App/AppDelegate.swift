@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ログイン時に起動（設定の「一般」で切り替える。起動の記録にも状態を残す）
     private let launchAtLogin = LaunchAtLogin()
     /// 更新の状態（メニューバーのメニューと、設定の「一般」に出す）
-    private let updates = AppUpdates()
+    private let updates = AppUpdates(defaults: .standard, currentBuild: Bundle.main.buildNumber)
     /// 更新の仕組み（公開鍵の入っていないビルドでは nil。SparkleUpdater）
     private var updater: SparkleUpdater?
     private lazy var settingsWindow = SettingsWindowController(stage: stage, thumbnails: thumbnails, shortcuts: shortcuts, editor: editor,

@@ -48,6 +48,6 @@
 	<key>SUPublicEDKey</key>
 	<string>fIyKq+2V6b4ohDcJu6T86VEbZV01mUdv7mWw5IE7cpY=</string>
 	<key>SUScheduledCheckInterval</key>
-	<integer>86400</integer>
+	<integer>3600</integer>
 </dict>
 </plist>
