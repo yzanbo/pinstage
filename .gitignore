@@ -13,3 +13,12 @@ DerivedData/
 
 # make dist で作る配布用の DMG・zip
 dist/
+
+# make sparkle で取り寄せる Sparkle（更新の仕組み。配布物をそのまま使うので、リポジトリには入れない）
+Vendor/
+
+# 更新ファイルの署名の秘密鍵の控え（generate_keys -x で書き出すもの。保管したら消す。Git には決して入れない）
+sparkle-private-key.txt
+
+# 署名の証明書の控え（キーチェーンアクセスで書き出すもの。保管したら消す。Git には決して入れない）
+*.p12

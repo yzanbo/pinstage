@@ -1,9 +1,10 @@
 #!/bin/bash
-# 開発用のコード署名の証明書「Pinstage Dev」を、ログインキーチェーンに作る。
+# コード署名の証明書「Pinstage Dev」を、ログインキーチェーンに作る。
 #
 # アドホック署名だと、ビルドし直すたびに macOS から「別のアプリ」と見なされ、
 # アクセシビリティの許可が外れ、許可し直す必要がある。
 # 毎回同じ証明書で署名すれば、ビルドし直しても同じアプリのまま扱われる。
+# 配る版（make dist）にもこの証明書で署名するので、作るのは最初の 1 回だけ（docs/ARCHITECTURE.md の「署名と更新」）。
 # 途中で、キーチェーンの変更を許可するためのパスワードを聞かれる。
 # （Pinshot・Pinshelf の scripts/create-dev-cert.sh と同じ作り）
 set -euo pipefail
@@ -46,3 +47,8 @@ security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" "$WORK/cert.pe
 
 echo
 echo "「${NAME}」の証明書を作りました。make run でビルドすると、この証明書で署名されます。"
+echo
+echo "配る版（make dist・make publish）にも、この証明書で署名します。作り直すと別の証明書になり、"
+echo "入れてもらったアプリのアクセシビリティの許可が外れるので、控えを取って保管してください:"
+echo "  キーチェーンアクセスの「自分の証明書」で「${NAME}」を選び、「書き出す…」で .p12 にする（強いパスワードを付ける）"
+echo "書き出したファイルはパスワード管理アプリなど Mac の外に保管し、ファイルは消します（Git には入れません）。"

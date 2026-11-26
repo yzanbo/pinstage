@@ -31,6 +31,9 @@ targets:
       - path: Pinstage
     dependencies:
       - target: PinstageCore
+      # 更新の仕組み（Sparkle）。make が Vendor/Sparkle に取り寄せたものを、アプリに入れる
+      - framework: Vendor/Sparkle/Sparkle.framework
+        embed: true
     info:
       path: Pinstage/Info.plist
       properties:
@@ -51,6 +54,19 @@ targets:
           - CFBundleURLName: app.pinstage.Pinstage
             CFBundleURLSchemes:
               - pinstage
+        # 更新（Sparkle）。版の一覧（appcast.xml）の場所
+        SUFeedURL: https://raw.githubusercontent.com/yzanbo/pinstage/main/appcast.xml
+        # 更新ファイルの署名を確かめる公開鍵（Pin シリーズで共通の鍵。Pinshelf と同じ値。空にすると、更新の機能を出さない）
+        SUPublicEDKey: "fIyKq+2V6b4ohDcJu6T86VEbZV01mUdv7mWw5IE7cpY="
+        # 新しい版を自動で確かめる（1 日に 1 回。設定の「一般」で切れる）
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 86400
+    entitlements:
+      path: Pinstage/Pinstage.entitlements
+      properties:
+        # Team ID のない署名（自己署名の証明書・アドホック署名）では、Hardened Runtime のままだと、
+        # アプリに入れた Sparkle の読み込みを断られるので、ライブラリの検証を切る（Pinshelf と同じ）
+        com.apple.security.cs.disable-library-validation: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.pinstage.Pinstage
@@ -72,6 +88,9 @@ targets:
         # 自前の証明書（Pinstage Dev）で署名しても Debug の dylib の読み込みを断られないよう、Debug だけ Hardened Runtime を切る
         Debug:
           ENABLE_HARDENED_RUNTIME: NO
+        # 配る版には、デバッガをつなぐための許可（get-task-allow）を入れない（何もしないと、Xcode がビルドのときに足す）
+        Release:
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
 
 schemes:
   Pinstage:
